@@ -361,6 +361,6 @@ the next generation."
                            (list file-name-or-game-data))
     :for game = initial-data :then (funcall iterator game)
     :for i :below (1+ times)
-    :do
-       (funcall printer game)
+    :when printer :do
+      (funcall printer game)
     :finally (return game)))
