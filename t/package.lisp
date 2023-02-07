@@ -30,6 +30,10 @@
   (is (equal (hl:read-game-file "glider.life")
              '((-1 . 1) (0 . -1) (0 . 1) (1 . 0) (1 . 1)))))
 
+(test read-life-1.05
+  (is (equal (hl:read-game-file "glider.lif")
+             '((0 . -1) (1 . 0) (-1 . 1) (0 . 1) (1 . 1)))))
+
 (test read-cells
   (is (equal (hl:read-game-file "glider.cells" )
              '((1 . 0) (2 . 1) (0 . 2) (1 . 2) (2 . 2)))))

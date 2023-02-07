@@ -28,8 +28,9 @@
            #:show-life-game
            #:read-game-file
            #:write-game-file
-           
-           #:read-life-stream
+
+           #:read-life-1.05-stream
+           #:read-life-1.06-stream
            #:write-life-stream
 
            #:read-cells-stream
@@ -40,6 +41,8 @@
 
            #:iterate-baseline-life
            #:construct
+           #:expand
+           #:successor
            #:qtnode
            #:maybe-qtnode
            #:life

@@ -16,12 +16,6 @@
 
 (in-package :cl-hashlife)
 
-(declaim (optimize (speed 1)
-                   (space 0)
-                   (safety 0)
-                   (debug 0)
-                   (compilation-speed 0)))
-
 (defun read-rle-stream (stream)
   (let* ((header (loop ;; Skip beginning comment lines and find the x and y size line
                        :for line = (read-line stream nil nil)
@@ -84,91 +78,94 @@
                         (advance-live-cells (max 1 old-count))))))))
 
 (defun write-rle-stream (stream pts comment)
+  (declare (ignorable stream pts comment))
   (format stream "# ~a~%" comment)
-  (multiple-value-bind (min-x min-y max-x max-y) (loop :for (x . y) :in pts
-                                                       :minimizing x :into min-x
-                                                       :minimizing y :into min-y
-                                                       :maximizing x :into max-x
-                                                       :maximizing y :into max-y
-                                                       :finally (return (values min-x min-y max-x max-y)))
-    (let ((x-size (- max-x min-x))
-          (y-size (- max-y min-y))
-          (cur-line-len 0)
-          (max-line-len 80)
-          (cur-live-count 0)
-          )
-      (flet ((process-live-cell (pt)
-               )))
-      ;; B3/S23 = "normal" Conways' Game of Life
-      (format stream "x = ~a, y = ~a, rule = B3/S23~%" x-size y-size)
-      (loop
-        :with cur-line-len = 0
-        :with max-line-len = 80
-        :with cur-count = 0
-        :with live-count = 0
-        :for prev-x = min-x :then cur-x
-        :for prev-y = min-y :then cur-y
+  ;; (multiple-value-bind (min-x min-y max-x max-y) (loop :for (x . y) :in pts
+  ;;                                                      :minimizing x :into min-x
+  ;;                                                      :minimizing y :into min-y
+  ;;                                                      :maximizing x :into max-x
+  ;;                                                      :maximizing y :into max-y
+  ;;                                                      :finally (return (values min-x min-y max-x max-y)))
+  ;;   (let ((x-size (- max-x min-x))
+  ;;         (y-size (- max-y min-y))
+  ;;         (cur-line-len 0)
+  ;;         (max-line-len 80)
+  ;;         (cur-live-count 0)
+  ;;         )
+  ;;     (declare (ignorable cur-line-len max-line-len cur-live-count))
+  ;;     (flet ((process-live-cell (pt)
+  ;;              )))
+  ;;     ;; B3/S23 = "normal" Conways' Game of Life
+  ;;     (format stream "x = ~a, y = ~a, rule = B3/S23~%" x-size y-size)
+  ;;     (loop
+  ;;       :with cur-line-len = 0
+  ;;       :with max-line-len = 80
+  ;;       :with cur-count = 0
+  ;;       :with live-count = 0
+  ;;       :for prev-x = min-x :then cur-x
+  ;;       :for prev-y = min-y :then cur-y
         
-        :for pt :in pts
-        :for cur-x = (car pt)
-        :for cur-y = (car pt)
-        :for cur-run-x = (- cur-x prev-x)
-        :for cur-run-y = (- cur-y prev-y)
-        :when (and (= cur-run-x 1)
-                   (= cur-run-y 0))
-          :do (incf live-count 1)
-        :when (= cur-run-y 1)
-          :do
-             (cond  ((> live-count 0)
-                     (let ((new-data (format nil
-                                             "~a~a"
-                                              (if (= 1 live-count)
-                                                  ""
-                                                  live-count)
-                                              "o")))
-                       (when (> (+ (length new-data)
-                                   cur-line-len)
-                                max-line-len)
-                         (format stream "~%")
-                         (setf cur-line-len 0))
-                       (format stream "~a$" new-data)
-                       (incf cur-line-len (length new-data))
-                       (setf live-count 0)
-                       (setf cur-x min-x)))
-                    (t
-                     (format stream "$")))
-        :when (or (> cur-run-y 0)
-                  (> cur-run-x 1))
-          :do
-             (when (> live-count 0)
-               (let ((new-data (format nil
-                                       "~a~a"
-                                       (if (= 1 live-count)
-                                           ""
-                                           live-count)
-                                       "o")))
-                 (when (> (+ (length new-data)
-                             cur-line-len)
-                          max-line-len)
-                   (format stream "~%")
-                   (setf cur-line-len 0))
-                 (format stream "~a" new-data)
-                 (incf cur-line-len (length new-data))
-                 (setf live-count 0)))
-             (let* ((dead-count (+ cur-run-x (* x-size cur-run-y )))
-                    (new-data (format nil
-                                      "~a~a"
-                                      (if (= 1 dead-count)
-                                          ""
-                                          dead-count)
-                                      "b")))
-               (when (> (+ (length new-data)
-                           cur-line-len)
-                        max-line-len)
-                 (format stream "~%")
-                 (setf cur-line-len 0))
-               (format stream "~a" new-data)
-               (incf cur-line-len (length new-data)))))))
+  ;;       :for pt :in pts
+  ;;       :for cur-x = (car pt)
+  ;;       :for cur-y = (car pt)
+  ;;       :for cur-run-x = (- cur-x prev-x)
+  ;;       :for cur-run-y = (- cur-y prev-y)
+  ;;       :when (and (= cur-run-x 1)
+  ;;                  (= cur-run-y 0))
+  ;;         :do (incf live-count 1)
+  ;;       :when (= cur-run-y 1)
+  ;;         :do
+  ;;            (cond  ((> live-count 0)
+  ;;                    (let ((new-data (format nil
+  ;;                                            "~a~a"
+  ;;                                             (if (= 1 live-count)
+  ;;                                                 ""
+  ;;                                                 live-count)
+  ;;                                             "o")))
+  ;;                      (when (> (+ (length new-data)
+  ;;                                  cur-line-len)
+  ;;                               max-line-len)
+  ;;                        (format stream "~%")
+  ;;                        (setf cur-line-len 0))
+  ;;                      (format stream "~a$" new-data)
+  ;;                      (incf cur-line-len (length new-data))
+  ;;                      (setf live-count 0)
+  ;;                      (setf cur-x min-x)))
+  ;;                   (t
+  ;;                    (format stream "$")))
+  ;;       :when (or (> cur-run-y 0)
+  ;;                 (> cur-run-x 1))
+  ;;         :do
+  ;;            (when (> live-count 0)
+  ;;              (let ((new-data (format nil
+  ;;                                      "~a~a"
+  ;;                                      (if (= 1 live-count)
+  ;;                                          ""
+  ;;                                          live-count)
+  ;;                                      "o")))
+  ;;                (when (> (+ (length new-data)
+  ;;                            cur-line-len)
+  ;;                         max-line-len)
+  ;;                  (format stream "~%")
+  ;;                  (setf cur-line-len 0))
+  ;;                (format stream "~a" new-data)
+  ;;                (incf cur-line-len (length new-data))
+  ;;                (setf live-count 0)))
+  ;;            (let* ((dead-count (+ cur-run-x (* x-size cur-run-y )))
+  ;;                   (new-data (format nil
+  ;;                                     "~a~a"
+  ;;                                     (if (= 1 dead-count)
+  ;;                                         ""
+  ;;                                         dead-count)
+  ;;                                     "b")))
+  ;;              (when (> (+ (length new-data)
+  ;;                          cur-line-len)
+  ;;                       max-line-len)
+  ;;                (format stream "~%")
+  ;;                (setf cur-line-len 0))
+  ;;              (format stream "~a" new-data)
+;;  (incf cur-line-len (length new-data))
+  )
               
         ;; :for state-change = t :then (or (/= prev-y cur-y)
         ;;                                 (/= (1+ prev-x) cur-x))
@@ -182,7 +179,7 @@
         ;;                (t 
         ;;                 (format stream "~a" new-update)))
         ;;         (incf cur-line-len (length new-update)))))))  
-(defun read-life-stream (stream)
+(defun read-life-1.06-stream (stream)
   (loop
       :with header = (read-line stream nil nil)
       :for x = (read stream nil nil)
@@ -207,12 +204,38 @@
                      min-x min-y
                      max-x max-y)))))
 
-(defun write-life-stream (stream pts comment)
+(defun write-life-1.06-stream (stream pts comment)
   (format stream "# ~a~%" comment)
   (loop :for (x . y) :in pts :do
     (format stream "~a ~a~%" x y))
   pts)
 
+(defun read-life-1.05-stream (stream)
+  (loop
+    :with off-x = 0
+    :with off-y = 0
+    :with this-y = 0
+    :with header = (read-line stream nil nil)
+    :for line = (read-line stream nil nil)
+    :while line
+    :when (and (char= (aref line 0) #\#)
+               (char= (aref line 1) #\P))
+      :do
+         (multiple-value-bind (val offset)
+             (read-from-string line nil nil :start 3)
+           (setf off-x val)
+           (setf off-y (read-from-string line nil nil :start offset))
+           (setf this-y off-y))
+    :when (or (char= (aref line 0) #\.)
+              (char= (aref line 0) #\*))
+      :nconcing
+      (prog1
+          (loop
+            :for cell :across line
+            :for this-x :from off-x
+            :when (char= cell #\*)
+              :collect (cons this-x this-y))
+        (incf this-y))))
 
 (defun read-cells-stream (stream)
   (loop :for line = (loop ;; Skip beginning comment lines
@@ -264,35 +287,43 @@
 
 
 (defun read-game-file (file-name)
-  (cond ((str:ends-with? ".life" file-name)
+  (cond ((str:ends-with? ".life" file-name :ignore-case t)
          (with-open-file (stream (find-game-file file-name))
-           (read-life-stream stream)))
-        ((str:ends-with? ".cells" file-name)
+           (read-life-1.06-stream stream)))
+        ((str:ends-with? ".lif" file-name :ignore-case t)
+         (with-open-file (stream (find-game-file file-name))
+           (read-life-1.05-stream stream)))
+        ((str:ends-with? ".cells" file-name :ignore-case t)
          (with-open-file (stream (find-game-file file-name))
            (read-cells-stream stream)))
-        ((str:ends-with? ".rle" file-name)
+        ((str:ends-with? ".rle" file-name :ignore-case t)
          (with-open-file (stream (find-game-file file-name))
            (read-rle-stream stream)))))
 
 (defun write-game-file (pts file-name &optional (comment "Written by cl-hashlife"))
-  (cond ((str:ends-with? ".life" file-name)
-         (with-open-file (stream (concatenate 'string *game-file-directory* file-name)
-                                 :direction :output
-                                 :if-exists :supersede
-                                 :external-format :utf8)
-           (write-life-stream stream pts comment)))
-        ((str:ends-with? ".cells" file-name)
-         (with-open-file (stream (concatenate 'string *game-file-directory* file-name)
-                                 :direction :output
-                                 :if-exists :supersede
-                                 :external-format :utf8)
-           (write-cells-stream stream pts comment)))))
+  (let ((pts (if (eq (type-of (caar pts)) 'cons)
+                 (mapcar #'car pts)
+                 pts)))
+    (cond ((str:ends-with? ".life" file-name)
+           (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
+                                   :direction :output
+                                   :if-exists :supersede
+                                   :external-format :utf8)
+             (write-life-1.06-stream stream pts comment)))
+          ((str:ends-with? ".cells" file-name)
+           (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
+                                   :direction :output
+                                   :if-exists :supersede
+                                   :external-format :utf8)
+             (write-cells-stream stream pts comment))))))
 
 
 (defun show-life-game (stream pts)
   (let ((cnt 0)
-        (pts pts))
-    (multiple-value-bind (min-x min-y max-x max-y) (loop :for (x . y) :in pts
+        (real-pts (if (eq (type-of (caar pts)) 'cons)
+                      pts
+                      (mapcar (lambda (x) (cons x 1)) pts))))
+    (multiple-value-bind (min-x min-y max-x max-y) (loop :for ((x . y) . gray) :in real-pts
                                                          :minimizing x :into min-x
                                                          :minimizing y :into min-y
                                                          :maximizing x :into max-x
@@ -303,15 +334,19 @@
           (loop :for x :from min-x :to max-x
                 :for elem = (cons x y)
                 :do
-                   (cond
-                     ((find elem pts :test #'equal)
-                      (remove elem pts)
-                      (incf cnt)
-                      (format stream "██"))
-                     (t (format stream "  "))))
-          (format stream "~%")
-        )
-      cnt)))
+                   (let ((it (find elem real-pts :test #'equal :key #'car)))
+                     (cond (it
+                            (remove elem real-pts :test #'equal :key #'car)
+                            (incf cnt)
+                            (cond ((> (cdr it) 0.7)
+                                   (format stream "██"))
+                                  ((> (cdr it) 0.5)
+                                   (format stream "▒▒"))
+                                  ((> (cdr it) 0.2)
+                                   (format stream "░░"))))
+                     (t (format stream "  ")))))
+      (format stream "~%")))
+    cnt))
 
 (defparameter *baseline-temp-table* (make-hash-table :test 'equal :size 100)
   "Avoid excessive hash table allocation in baseline-life.")
