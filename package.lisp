@@ -20,37 +20,60 @@
   (:nicknames #:hl)
 
   (:use #:cl #:alexandria)
-  (:export #:spatial-tree-element-type
-           #:quadtree-node
-           #:make-quad-tree-node
-           #:make-hash-life
-           #:hl-insert
+  (:export
+
+           ;; Pretty print 2D grid to stream
+           ;; Takes (x . y) or ((x . y) . gray-level)
            #:show-life-game
+
+           ;; Look for game file in game-files directory
+           ;; of cl-hashlife package directory and guess
+           ;; file type by extension
            #:read-game-file
            #:write-game-file
 
+           ;; No write support yet for these two
            #:read-life-1.05-stream
-           #:read-life-1.06-stream
-           #:write-life-stream
+           #:read-rle-stream
 
+           ;; Read/write .life 1.06
+           #:read-life-1.06-stream
+           #:write-life-1.06-stream
+
+           ;; Read/write .cells
            #:read-cells-stream
            #:write-cells-stream
 
-           #:read-rle-stream
-           #:write-rle-stream
-
+           ;; O(n) life using lists of (x . y) coordinates
            #:iterate-baseline-life
+
+           ;; Iterate a file or point list a number of times
+           ;; Takes iterator and printer functions as key
+           ;; parameters.
+           #:iterate-game-of-life
+
+           ;; Hashlife functions translated from this Python:
+           ;; https://github.com/johnhw/hashlife
            #:construct
            #:expand
            #:successor
            #:qtnode
+           #:pad
+           #:is-padded
+           #:q-join
+           #:inner
+           #:ffwd
+           #:advance
            #:maybe-qtnode
            #:life
+           #:crop
            #:center
            #:get-zero
            #:life-4x4
            #:*on*
            #:*off*
-           #:iterate-game-of-life
-           
-           ))
+
+           )
+
+
+           )

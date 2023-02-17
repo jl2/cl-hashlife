@@ -104,7 +104,7 @@
   ;;       :with live-count = 0
   ;;       :for prev-x = min-x :then cur-x
   ;;       :for prev-y = min-y :then cur-y
-        
+
   ;;       :for pt :in pts
   ;;       :for cur-x = (car pt)
   ;;       :for cur-y = (car pt)
@@ -166,7 +166,7 @@
   ;;              (format stream "~a" new-data)
 ;;  (incf cur-line-len (length new-data))
   )
-              
+
         ;; :for state-change = t :then (or (/= prev-y cur-y)
         ;;                                 (/= (1+ prev-x) cur-x))
         ;; :when (not state-change)
@@ -176,9 +176,9 @@
         ;;         (cond  ((> (+ cur-line-len (length new-update)) max-line-len)
         ;;                 (format stream "~%~a" new-update)
         ;;                 (setf cur-line-len 0))
-        ;;                (t 
+        ;;                (t
         ;;                 (format stream "~a" new-update)))
-        ;;         (incf cur-line-len (length new-update)))))))  
+        ;;         (incf cur-line-len (length new-update)))))))
 (defun read-life-1.06-stream (stream)
   (loop
       :with header = (read-line stream nil nil)
@@ -276,14 +276,17 @@
   pts)
 
 (defparameter *game-file-dirs* (list (asdf:system-relative-pathname :cl-hashlife "game-files/")
-                                     "~/data/life_games/"))
+                                     "~/data/life_games/"
+                                     "~/src/hashlife/lifep/"))
 
 
 (defun find-game-file (fname)
   (loop
     :for path :in *game-file-dirs*
-    :until (probe-file (merge-pathnames fname path))
-    :finally (return (merge-pathnames fname path))))
+    :when (probe-file (merge-pathnames fname path))
+      :do
+         (return-from find-game-file (merge-pathnames fname path)))
+  fname)
 
 
 (defun read-game-file (file-name)
@@ -320,9 +323,11 @@
 
 (defun show-life-game (stream pts)
   (let ((cnt 0)
-        (real-pts (if (eq (type-of (caar pts)) 'cons)
-                      pts
-                      (mapcar (lambda (x) (cons x 1)) pts))))
+        (real-pts (sort (if (eq (type-of (caar pts)) 'cons)
+                            pts
+                            (mapcar (lambda (x) (cons x 1)) pts))
+                        #'point-less
+                        :key #'car)))
     (multiple-value-bind (min-x min-y max-x max-y) (loop :for ((x . y) . gray) :in real-pts
                                                          :minimizing x :into min-x
                                                          :minimizing y :into min-y
@@ -344,9 +349,9 @@
                                    (format stream "▒▒"))
                                   ((> (cdr it) 0.2)
                                    (format stream "░░"))))
-                     (t (format stream "  ")))))
-      (format stream "~%")))
-    cnt))
+                           (t (format stream "  ")))))
+          (format stream "~%")))
+    (values pts cnt)))
 
 (defparameter *baseline-temp-table* (make-hash-table :test 'equal :size 100)
   "Avoid excessive hash table allocation in baseline-life.")

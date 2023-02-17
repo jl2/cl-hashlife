@@ -25,12 +25,15 @@
   :license "ISC"
   :version "0.0.1"
   :serial t
-  :depends-on ( :cl-hashlife
-                  :fiveam)
+  :depends-on (:cl-hashlife
+               :fiveam)
   
   :components ((:module "t"
-                :components
-                ((:file "package"))))
+                :components (
+                             (:file "package")
+                             (:file "readers")
+                             (:file "writers")
+                             )))
   :perform
   (test-op :after (op c)
            (eval

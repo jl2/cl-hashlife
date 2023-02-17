@@ -1,5 +1,5 @@
-;; cl-hashlife.asd
-
+;; readers.lisp
+;;
 ;; Copyright (c) 2023 Jeremiah LaRocco <jeremiah_larocco@fastmail.com>
 
 ;; Permission to use, copy, modify, and/or distribute this software for any
@@ -14,15 +14,30 @@
 ;; ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 ;; OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-(asdf:defsystem #:cl-hashlife
-  :description "Describe cl-hashlife here"
-  :author "Jeremiah LaRocco <jeremiah_larocco@fastmail.com>"
-  :license  "ISC"
-  :version "0.0.1"
-  :serial t
-  :depends-on (#:j-utils #:alexandria #:str #:fare-memoization)
-  :components ((:file "package")
-               (:file "utilities")
-               (:file "hashlife"))
-               
-  :in-order-to ((test-op (test-op cl-hashlife.test))))
+(in-package :cl-user)
+(defpackage :cl-hashlife.test.readers
+  (:use :cl
+        :fiveam
+        :alexandria
+        :cl-hashlife))
+
+(in-package :cl-hashlife.test.readers)
+
+(def-suite :cl-hashlife-readers)
+(in-suite :cl-hashlife-readers)
+
+(test read-life-1.06
+  (is (equal (hl:read-game-file "glider.life")
+             '((-1 . 1) (0 . -1) (0 . 1) (1 . 0) (1 . 1)))))
+
+(test read-life-1.05
+  (is (equal (hl:read-game-file "glider.lif")
+             '((0 . -1) (1 . 0) (-1 . 1) (0 . 1) (1 . 1)))))
+
+(test read-cells
+  (is (equal (hl:read-game-file "glider.cells" )
+             '((1 . 0) (2 . 1) (0 . 2) (1 . 2) (2 . 2)))))
+
+(test read-rle
+  (is (equal (hl:read-game-file "glider.rle")
+             '((1 . 0) (2 . 1) (0 . 2) (1 . 2) (2 . 2)))))
