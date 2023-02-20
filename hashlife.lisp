@@ -75,36 +75,53 @@
 ;; (defun compute-hash-list (as-list)
 ;;   (apply #'compute-hash as-list))
 
+;;(fare-memoization:memoize 'q-join)
+;;
+(defparameter *join-table* (make-hash-table))
 (defun q-join (a b c d)
   "Combine four children at level `k-1` to a new node at level `k`.
 If this is cached, return the cached node.
 Otherwise, create a new node, and add it to the cache."
   (declare (type qtnode a b c d))
-  (make-qtnode :k (1+ (q-k a))
-               :a a
-               :b b
-               :c c
-               :d d
-               :n (+ (q-n a)
-                     (q-n b)
-                     (q-n c)
-                     (q-n d))
-               :hash (compute-hash a b c d)))
+  (let ((the-hash (compute-hash a b c d)))
+    (multiple-value-bind (val found) (gethash the-hash *join-table*)
+      (cond (found
+             val)
+            (t
+             (setf (gethash the-hash *join-table*)
+                   (make-qtnode :k (1+ (q-k a))
+                                :a a
+                                :b b
+                                :c c
+                                :d d
+                                :n (+ (q-n a)
+                                      (q-n b)
+                                      (q-n c)
+                                      (q-n d))
+                                :hash (compute-hash a b c d)))
+             (gethash the-hash *join-table*))))))
 
-(fare-memoization:memoize 'q-join)
 
+
+;;(fare-memoization:memoize 'get-zero)
+(defparameter *zero-table* (make-hash-table))
 (defun get-zero (k)
   "Return an empty node at level `k`."
   (declare (type integer k))
-  (if (> k 0)
-      (let ((omk (- k 1)))
-        (q-join (get-zero omk)
-                (get-zero omk)
-                (get-zero omk)
-                (get-zero omk)))
-      *off*))
-
-(fare-memoization:memoize 'get-zero)
+  (multiple-value-bind (val found) (gethash k *zero-table*)
+    (cond (found
+           val)
+          (t
+           (setf
+            (gethash k *zero-table*)
+            (if (> k 0)
+                (let ((omk (- k 1)))
+                  (q-join (get-zero omk)
+                          (get-zero omk)
+                          (get-zero omk)
+                          (get-zero omk)))
+                *off*))
+           (gethash k *zero-table*)))))
 
 (defun center (m)
   "Return a node at level `k+1`, which is centered on the given quadtree node."
@@ -160,77 +177,86 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
              (life        m.a.d  m.b.c  m.b.d  m.c.b  m.d.a  m.d.b  m.c.d  m.d.c  m.d.d))))))))
 
 
+
+(defparameter *successor-table* (make-hash-table :test 'equal))
+
 (defun successor (m &optional (j (- (q-k m) 2)))
   "Return the 2**k-1 x 2**k-1 successor, 2**j generations in the future,
 where j<= k-2, caching the result."
   (declare (type qtnode m)
            (type integer j))
-  (cond
-    ((= (q-n m) 0)
-     (q-a m))
-    ((= (q-k m) 2)
-     (life-4x4 m))
-    (t
-     (with-slots ((ma a) (mb b) (mc c) (md d)) m
-       (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) ma
-         (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) mb
-           (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) mc
-             (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) md
+  (let ((the-hash (cons (q-hash m) j)))
+    (multiple-value-bind (val found) (gethash the-hash *successor-table*)
+      (cond (found
+             val)
+            (t
+             (setf (gethash the-hash *successor-table*)
+                   (cond
+                     ((= (q-n m) 0)
+                      (q-a m))
+                     ((= (q-k m) 2)
+                      (life-4x4 m))
+                     (t
+                      (with-slots ((ma a) (mb b) (mc c) (md d)) m
+                        (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) ma
+                          (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) mb
+                            (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) mc
+                              (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) md
 
-               (let (
-                     ;; c1 = successor(join(m.a.a, m.a.b, m.a.c, m.a.d), j)
-                     (c1 (successor (q-join m.a.a  m.a.b  m.a.c  m.a.d)  j))
+                                (let (
+                                      ;; c1 = successor(join(m.a.a, m.a.b, m.a.c, m.a.d), j)
+                                      (c1 (successor (q-join m.a.a  m.a.b  m.a.c  m.a.d)  j))
 
-                     ;; c2 = successor(join(m.a.b, m.b.a, m.a.d, m.b.c), j)
-                     (c2 (successor (q-join m.a.b  m.b.a  m.a.d  m.b.c)  j))
+                                      ;; c2 = successor(join(m.a.b, m.b.a, m.a.d, m.b.c), j)
+                                      (c2 (successor (q-join m.a.b  m.b.a  m.a.d  m.b.c)  j))
 
 
-                     ;; c3 = successor(join(m.b.a, m.b.b, m.b.c, m.b.d), j)
-                     (c3 (successor (q-join m.b.a  m.b.b  m.b.c  m.b.d)  j))
+                                      ;; c3 = successor(join(m.b.a, m.b.b, m.b.c, m.b.d), j)
+                                      (c3 (successor (q-join m.b.a  m.b.b  m.b.c  m.b.d)  j))
 
-                     ;; c4 = successor(join(m.a.c, m.a.d, m.c.a, m.c.b), j)
-                     (c4 (successor (q-join m.a.c  m.a.d  m.c.a  m.c.b)  j))
+                                      ;; c4 = successor(join(m.a.c, m.a.d, m.c.a, m.c.b), j)
+                                      (c4 (successor (q-join m.a.c  m.a.d  m.c.a  m.c.b)  j))
 
-                     ;; c5 = successor(join(m.a.d, m.b.c, m.c.b, m.d.a), j)
-                     (c5 (successor (q-join m.a.d  m.b.c  m.c.b  m.d.a)  j))
+                                      ;; c5 = successor(join(m.a.d, m.b.c, m.c.b, m.d.a), j)
+                                      (c5 (successor (q-join m.a.d  m.b.c  m.c.b  m.d.a)  j))
 
-                     ;; c6 = successor(join(m.b.c, m.b.d, m.d.a, m.d.b), j)
-                     (c6 (successor (q-join m.b.c  m.b.d  m.d.a  m.d.b)  j))
+                                      ;; c6 = successor(join(m.b.c, m.b.d, m.d.a, m.d.b), j)
+                                      (c6 (successor (q-join m.b.c  m.b.d  m.d.a  m.d.b)  j))
 
-                     ;; c7 = successor(join(m.c.a, m.c.b, m.c.c, m.c.d), j)
-                     (c7 (successor (q-join m.c.a  m.c.b  m.c.c  m.c.d)  j))
+                                      ;; c7 = successor(join(m.c.a, m.c.b, m.c.c, m.c.d), j)
+                                      (c7 (successor (q-join m.c.a  m.c.b  m.c.c  m.c.d)  j))
 
-                     ;; c8 = successor(join(m.c.b, m.d.a, m.c.d, m.d.c), j)
-                     (c8 (successor (q-join m.c.b  m.d.a  m.c.d  m.d.c)  j))
+                                      ;; c8 = successor(join(m.c.b, m.d.a, m.c.d, m.d.c), j)
+                                      (c8 (successor (q-join m.c.b  m.d.a  m.c.d  m.d.c)  j))
 
-                     ;; c9 = successor(join(m.d.a, m.d.b, m.d.c, m.d.d), j)
-                     (c9 (successor (q-join m.d.a  m.d.b  m.d.c  m.d.d)  j)))
-                 (if (< j (- (q-k m) 2))
-                     (q-join
-                      (q-join (q-d c1) (q-c c2)
-                              (q-b c4) (q-a c5))
-                      (q-join (q-d c2) (q-c c3)
-                              (q-b c5) (q-a c6))
+                                      ;; c9 = successor(join(m.d.a, m.d.b, m.d.c, m.d.d), j)
+                                      (c9 (successor (q-join m.d.a  m.d.b  m.d.c  m.d.d)  j)))
+                                  (if (< j (- (q-k m) 2))
+                                      (q-join
+                                       (q-join (q-d c1) (q-c c2)
+                                               (q-b c4) (q-a c5))
+                                       (q-join (q-d c2) (q-c c3)
+                                               (q-b c5) (q-a c6))
 
-                      (q-join (q-d c4) (q-c c5)
-                              (q-b c7) (q-a c8))
-                      (q-join (q-d c5) (q-c c6)
-                              (q-b c8) (q-a c9)))
-                     (q-join
-                      (successor (q-join c1 c2
-                                         c4 c5)
-                                 j)
-                      (successor (q-join c2 c3
-                                         c5 c6)
-                                 j)
-                      (successor (q-join c4 c5
-                                         c7 c8)
-                                 j)
-                      (successor (q-join c5 c6
-                                         c8 c9)
-                                 j))))))))))))
+                                       (q-join (q-d c4) (q-c c5)
+                                               (q-b c7) (q-a c8))
+                                       (q-join (q-d c5) (q-c c6)
+                                               (q-b c8) (q-a c9)))
+                                      (q-join
+                                       (successor (q-join c1 c2
+                                                          c4 c5)
+                                                  j)
+                                       (successor (q-join c2 c3
+                                                          c5 c6)
+                                                  j)
+                                       (successor (q-join c4 c5
+                                                          c7 c8)
+                                                  j)
+                                       (successor (q-join c5 c6
+                                                          c8 c9)
+                                                  j)))))))))))))))))
 
-(fare-memoization:memoize 'successor)
+
 
 (defun construct (pts)
   "Turn a list of x y coordinates into a quadtree and return the top level node."
@@ -315,13 +341,14 @@ where j<= k-2, caching the result."
          node)))
 
 (defun ffwd (node n)
-
-  (loop :with temp-node = (pad node)
-        :for gens = 0
-          :then (+ gens (ash 1 (- (q-k temp-node) 2)))
-        :for i :below n
-        :do (setf temp-node (successor temp-node))
-        :finally (return (values temp-node gens))))
+  (loop
+    :for padded-node = (pad node)
+      :then (pad next-node)
+    :for next-node = (successor padded-node)
+    :for gens = 0
+      :then (+ gens (ash 1 (- (q-k padded-node) 2)))
+    :for i :below n
+    :finally (return (values next-node gens))))
 
 (defun advance (node n)
   "Advance node by exactly n generations, using the binary
@@ -384,13 +411,6 @@ expansion of n to find the correct successors."
       (pad (center node))
       node))
 
-(defun point-less (a b)
-  (if (< (cdr a) (cdr b))
-      a
-      (if (> (cdr a) (cdr b))
-          b
-          (< (car a) (car b)))))
-
 (defun expand (node &key
                       (x 0) (y 0)
                       min-x max-x
@@ -401,53 +421,66 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
   ;; Null or no cells on means skip over this whole quadtree
   (when (or (null node)
             (= 0 (q-n node)))
+    (format t "empty node node ~a n: ~a~%" node (if node (q-n node) nil))
     (return-from expand nil))
+
   (let* ((size (expt 2 (q-k node) ))
          (offset (ash size -1)))
-    (cond ;; Clipping outside of min-x, max-x and min-y, max-y
+    (cond
+
+      ;; Clipping outside of min-x, max-x and min-y, max-y
       ((and min-x
-             min-y
-             max-x
-             max-y
-             (or (< (+ x size) min-x)
-                 (< (+ y size) min-y)
-                 (> (+ x size) max-x)
-                 (> (+ y size) max-y)))
-       (format t "Clipping: ~a ~a~%" x y)
+            min-y
+            max-x
+            max-y
+            (or 
+             (< x  min-x)
+             (< y  min-y)
+             (> x  max-x)
+             (> y  max-y)))
+       (format t "Clipping ~a ~a~%" x y)
        nil)
 
+      ;; Collect cells at this zoom level
       ((= (q-k node) level)
+
+       ;; Scale quadtree to match scale of level 0
+       (let ((reduction (-
+                         (+ level  ;;  Higher levels cover more of the quadree
+                            (ash size -1))))))
        (list
-        (cons (cons (ash x level)
-                    (ash y level))
+        (cons (cons (ash x reduction)
+                    (ash y reduction))
               (/ (q-n node)
                  (* size size)))))
+
+      ;; Otherwise try expanding the children
       (t
        (with-slots (a b c d) node
          (concatenate 'list
 
-          (expand a
-                  :x x
-                  :y y
-                  :min-x min-x :max-x max-x
-                  :min-y min-y :max-y max-y
-                  :level level)
-          (expand b
-                  :x (+ x offset)
-                  :y y
-                  :min-x min-x :max-x max-x
-                  :min-y min-y :max-y max-y
-                  :level level)
+                      (expand a
+                              :x x
+                              :y y
+                              :min-x min-x :max-x max-x
+                              :min-y min-y :max-y max-y
+                              :level level)
+                      (expand b
+                              :x (+ x offset)
+                              :y y
+                              :min-x min-x :max-x max-x
+                              :min-y min-y :max-y max-y
+                              :level level)
 
-          (expand c
-                  :x x
-                  :y (+ y offset)
-                  :min-x min-x :max-x max-x
-                  :min-y min-y :max-y max-y
-                  :level level)
-          (expand d
-                  :x (+ x offset)
-                  :y (+ y offset)
-                  :min-x min-x :max-x max-x
-                  :min-y min-y :max-y max-y
-                  :level level)))))))
+                      (expand c
+                              :x x
+                              :y (+ y offset)
+                              :min-x min-x :max-x max-x
+                              :min-y min-y :max-y max-y
+                              :level level)
+                      (expand d
+                              :x (+ x offset)
+                              :y (+ y offset)
+                              :min-x min-x :max-x max-x
+                              :min-y min-y :max-y max-y
+                              :level level)))))))

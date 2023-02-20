@@ -16,6 +16,19 @@
 
 (in-package :cl-hashlife)
 
+(defstruct (life-point (:conc-name pt-) )
+  (x 0 :type integer)
+  (y 0 :type integer)
+  (gray 0 :type ratio))
+
+(defun pt (x y &optional (gray 1))
+  (make-pt :x x
+           :y y
+           :gray gray))
+(defun point-less (a b)
+  (and (< (cdr a) (cdr b))
+       (<= (car a) (car b))))
+
 (defun read-rle-stream (stream)
   (let* ((header (loop ;; Skip beginning comment lines and find the x and y size line
                        :for line = (read-line stream nil nil)
@@ -321,37 +334,42 @@
              (write-cells-stream stream pts comment))))))
 
 
-(defun show-life-game (stream pts)
-  (let ((cnt 0)
-        (real-pts (sort (if (eq (type-of (caar pts)) 'cons)
-                            pts
-                            (mapcar (lambda (x) (cons x 1)) pts))
-                        #'point-less
-                        :key #'car)))
-    (multiple-value-bind (min-x min-y max-x max-y) (loop :for ((x . y) . gray) :in real-pts
-                                                         :minimizing x :into min-x
-                                                         :minimizing y :into min-y
-                                                         :maximizing x :into max-x
-                                                         :maximizing y :into max-y
-                                                         :finally (return (values min-x min-y max-x max-y)))
-      (loop
-        :for y :from min-y :to max-y :do
-          (loop :for x :from min-x :to max-x
-                :for elem = (cons x y)
-                :do
-                   (let ((it (find elem real-pts :test #'equal :key #'car)))
-                     (cond (it
-                            (remove elem real-pts :test #'equal :key #'car)
-                            (incf cnt)
-                            (cond ((> (cdr it) 0.7)
-                                   (format stream "██"))
-                                  ((> (cdr it) 0.5)
-                                   (format stream "▒▒"))
-                                  ((> (cdr it) 0.2)
-                                   (format stream "░░"))))
-                           (t (format stream "  ")))))
-          (format stream "~%")))
-    (values pts cnt)))
+(defun show-life-game (stream pts &optional (level 0))
+  (flet ((normalize (x)
+           (ash x level))
+         (denormalize (x)
+           (ash x level)))
+    (let ((cnt 0)
+          (remaining-pts (sort (if (eq (type-of (caar pts)) 'cons)
+                                   (copy-list pts)
+                                   (mapcar (lambda (x) (cons x 1)) pts))
+                               #'point-less
+                               :key #'car)))
+      (format t "~a~%" remaining-pts)
+      (multiple-value-bind (min-x min-y max-x max-y) (loop :for ((x . y) . gray) :in remaining-pts
+                                                           :minimizing x :into min-x
+                                                           :minimizing y :into min-y
+                                                           :maximizing x :into max-x
+                                                           :maximizing y :into max-y
+                                                           :finally (return (values min-x min-y max-x max-y)))
+        (loop
+          :for y :from (normalize min-y) :to (normalize max-y) :do
+            (loop :for x :from (normalize min-x) :to (normalize max-x)
+                  :for elem = (cons (denormalize x) (denormalize y))
+                  :do
+                     (let ((it (find elem remaining-pts :test #'equal :key #'car)))
+                       (cond (it
+                              (setf remaining-pts (remove elem remaining-pts :test #'equal :key #'car))
+                              (incf cnt)
+                              (cond ((> (cdr it) 0.7)
+                                     (format stream "██"))
+                                    ((> (cdr it) 0.5)
+                                     (format stream "▒▒"))
+                                    ((> (cdr it) 0.2)
+                                     (format stream "░░"))))
+                             (t (format stream "  ")))))
+            (format stream "~%")))
+      (values pts remaining-pts cnt))))
 
 (defparameter *baseline-temp-table* (make-hash-table :test 'equal :size 100)
   "Avoid excessive hash table allocation in baseline-life.")
