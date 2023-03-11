@@ -27,17 +27,37 @@
 (in-suite :cl-hashlife-readers)
 
 (test read-life-1.06
-  (is (equal (hl:read-game-file "glider.life")
-             '((-1 . 1) (0 . -1) (0 . 1) (1 . 0) (1 . 1)))))
+  (is (every #'hl::pt-=
+             (list (hl::pt 0  -1)
+                   (hl::pt 1  0)
+                   (hl::pt -1  1)
+                   (hl::pt 0  1)
+                   (hl::pt 1  1))
+             (hl:read-game-file "glider.life"))))
 
 (test read-life-1.05
-  (is (equal (hl:read-game-file "glider.lif")
-             '((0 . -1) (1 . 0) (-1 . 1) (0 . 1) (1 . 1)))))
+  (is (every #'hl::pt-=
+             (list (hl::pt 0  -1)
+                   (hl::pt 1  0)
+                   (hl::pt -1  1)
+                   (hl::pt 0  1)
+                   (hl::pt 1  1))
+             (hl:read-game-file "glider.lif"))))
 
 (test read-cells
-  (is (equal (hl:read-game-file "glider.cells" )
-             '((1 . 0) (2 . 1) (0 . 2) (1 . 2) (2 . 2)))))
+  (is (every #'hl::pt-=
+             (list (hl::pt 1  0)
+                   (hl::pt 2 1)
+                   (hl::pt 0 2)
+                   (hl::pt 1 2)
+                   (hl::pt 2 2))
+             (hl:read-game-file "glider.cells" ))))
 
 (test read-rle
-  (is (equal (hl:read-game-file "glider.rle")
-             '((1 . 0) (2 . 1) (0 . 2) (1 . 2) (2 . 2)))))
+  (is (every #'hl::pt-=
+             (list (hl::pt 1 0)
+                   (hl::pt 2 1)
+                   (hl::pt 0 2)
+                   (hl::pt 1 2)
+                   (hl::pt 2 2))
+             (hl:read-game-file "glider.rle"))))

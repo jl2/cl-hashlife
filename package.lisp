@@ -54,6 +54,13 @@
 
            ;; Hashlife functions translated from this Python:
            ;; https://github.com/johnhw/hashlife
+           #:get-address
+           #:a
+           #:b
+           #:c
+           #:d
+           #:k
+           #:n
            #:construct
            #:expand
            #:successor
@@ -73,7 +80,10 @@
            #:*on*
            #:*off*
 
-           )
-
-
-           )
+           #:q-k
+           #:q-n
+           #:q-a
+           #:q-b
+           #:q-c
+           #:q-d
+           ))

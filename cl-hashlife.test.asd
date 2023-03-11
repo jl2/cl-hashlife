@@ -31,8 +31,9 @@
   :components ((:module "t"
                 :components (
                              (:file "package")
-                             (:file "readers")
-                             (:file "writers")
+                             (:file "test-readers")
+                             (:file "test-writers")
+                             (:file "test-hashlife")
                              )))
   :perform
   (test-op :after (op c)

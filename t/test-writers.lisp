@@ -26,18 +26,35 @@
 (def-suite :cl-hashlife-writers)
 (in-suite :cl-hashlife-writers)
 
-(test read-life-1.06
-  (is (equal (hl:read-game-file "glider.life")
-             '((-1 . 1) (0 . -1) (0 . 1) (1 . 0) (1 . 1)))))
+(test write-life-1.06
+      (let* ((glider
+               (list (hl::pt -1  1)
+                     (hl::pt 1  0)
+                     (hl::pt 0  -1)
+                     (hl::pt 1  1)
+                     (hl::pt 0  1)))
+             (str (with-output-to-string (outs)
+                    (hl::write-life-1.06-stream outs glider "test-write-life-1.06"))))
+        (is (string= str
+                     "# test-write-life-1.06
+0 -1
+1 0
+-1 1
+0 1
+1 1
+"))))
 
-(test read-life-1.05
-  (is (equal (hl:read-game-file "glider.lif")
-             '((0 . -1) (1 . 0) (-1 . 1) (0 . 1) (1 . 1)))))
-
-(test read-cells
-  (is (equal (hl:read-game-file "glider.cells" )
-             '((1 . 0) (2 . 1) (0 . 2) (1 . 2) (2 . 2)))))
-
-(test read-rle
-  (is (equal (hl:read-game-file "glider.rle")
-             '((1 . 0) (2 . 1) (0 . 2) (1 . 2) (2 . 2)))))
+(test write-cells
+      (let* ((glider (list (hl::pt -1  1)
+                           (hl::pt 1  0)
+                           (hl::pt 0  -1)
+                           (hl::pt 1  1)
+                           (hl::pt 0  1)))
+             (str (with-output-to-string (outs)
+                    (hl::write-cells-stream outs glider "test-write-cells"))))
+        (is (string= str
+                     "! test-write-cells
+.O.
+..O
+OOO
+"))))

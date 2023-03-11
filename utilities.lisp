@@ -16,18 +16,97 @@
 
 (in-package :cl-hashlife)
 
+(defparameter *game-file-dirs* (list
+                                (asdf:system-relative-pathname :cl-hashlife "game-files/")
+                                "~/data/life_games/"
+                                "~/src/hashlife/lifep/"))
+
+
+(deftype maybe-node () '(or null qtnode))
+
+(defstruct (qtnode (:conc-name q-) )
+  (k 0 :type integer )
+  (a nil :type maybe-node)
+  (b nil :type maybe-node)
+  (c nil :type maybe-node)
+  (d nil :type maybe-node)
+  (n nil :type integer)
+  (hash nil :type integer))
+
+(defun get-address (node address)
+  (loop 
+    :for next-node = node
+      :then (slot-value next-node
+                        (intern
+                         (format nil "~c"
+                                 (char-upcase addr))
+                         :cl-hashlife))
+    :for addr :across address
+    :finally
+       (return next-node)))
+
 (defstruct (life-point (:conc-name pt-) )
   (x 0 :type integer)
   (y 0 :type integer)
-  (gray 0 :type ratio))
+  (gray 0 :type (or number qtnode)))
 
 (defun pt (x y &optional (gray 1))
-  (make-pt :x x
-           :y y
-           :gray gray))
-(defun point-less (a b)
-  (and (< (cdr a) (cdr b))
-       (<= (car a) (car b))))
+  (declare (type integer x y)
+           (type (or number qtnode) gray))
+  (make-life-point :x x
+                :y y
+                :gray gray))
+
+(defun pt-< (a b)
+  (declare (type life-point a b))
+  (or (< (pt-y a) (pt-y b))
+      (if (= (pt-y a) (pt-y b))
+          (< (pt-x a) (pt-x b))
+          nil)))
+
+(defun pt-= (a b)
+  (declare (type life-point a b))
+  (and (= (pt-x a) (pt-x b))
+       (= (pt-y a) (pt-y b))))
+
+(defun pt-+ (a b)
+  (with-slots ((x1 x) (y1 y) gray) a
+    (with-slots ((x2 x) (y2 y)) b
+      (make-life-point :x (+ x1 x2)
+                       :y (+ y1 y2)
+                       :gray gray))))
+
+(defun pt-- (a b)
+  (with-slots ((x1 x) (y1 y) gray) a
+    (with-slots ((x2 x) (y2 y)) b
+      (make-life-point :x (- x1 x2)
+                       :y (- y1 y2)
+                       :gray gray))))
+
+(defun even-pt (pt)
+  (with-slots (x y gray) pt
+    (pt (- x (logand x 1))
+        (- y (logand y 1))
+        gray)))
+
+(defun right-pt (pt)
+  (with-slots (x y gray) pt
+    (pt (1+ x)
+        y
+        gray)))
+
+(defun down-pt (pt)
+  (with-slots (x y gray) pt
+    (pt x
+        (1+ y)
+        gray)))
+
+(defun corner-pt (pt)
+  (with-slots (x y gray) pt
+    (pt (1+ x)
+        (1+ y)
+        gray)))
+
 
 (defun read-rle-stream (stream)
   (let* ((header (loop ;; Skip beginning comment lines and find the x and y size line
@@ -57,7 +136,7 @@
              ;; Collect count live cells and advance by count, minding x-size and y-size
              (advance-live-cells (count)
                (loop :for i :below count
-                     :collecting (cons cur-x cur-y)
+                     :collecting (pt cur-x cur-y)
                      :do (advance-by 1))))
       (loop
         :for line = (read-line stream nil nil)
@@ -198,29 +277,22 @@
       :for x = (read stream nil nil)
       :for y = (read stream nil nil)
       :while (and x y)
-      :collect (cons x y) :into pts
+      :collect (pt x y) :into pts
       :minimizing x :into min-x
       :minimizing y :into min-y
       :maximizing x :into max-x
       :maximizing y :into max-y
       :finally
          (return
-           (let* ((tmp (stable-sort pts
-                                   #'<
-                                   :key
-                                   #'cdr))
-                  (tmp2 (stable-sort tmp
-                                     #'<
-                                     :key #'car)))
-             (multiple-value-bind (val offset) (read-from-string "3 4" ) (values val (subseq "3 4" offset)))
-             (values tmp2
+           (let* ((rval (stable-sort pts #'pt-<)))
+             (values rval
                      min-x min-y
                      max-x max-y)))))
 
 (defun write-life-1.06-stream (stream pts comment)
   (format stream "# ~a~%" comment)
-  (loop :for (x . y) :in pts :do
-    (format stream "~a ~a~%" x y))
+  (loop :for pt :in (sort (copy-list pts) #'pt-<) :do
+    (format stream "~a ~a~%" (pt-x pt) (pt-y pt)))
   pts)
 
 (defun read-life-1.05-stream (stream)
@@ -247,7 +319,7 @@
             :for cell :across line
             :for this-x :from off-x
             :when (char= cell #\*)
-              :collect (cons this-x this-y))
+              :collect (pt this-x this-y))
         (incf this-y))))
 
 (defun read-cells-stream (stream)
@@ -264,34 +336,30 @@
           :for next-char :across line
           :for x :from 0
           :when (or (eq next-char #\*) (eq next-char #\O))
-            :collect (cons x y))))
+            :collect (pt x y))))
 
 (defun write-cells-stream (stream pts &optional (comment ""))
   (format stream "! ~a~%" comment)
-  (multiple-value-bind (min-x min-y max-x max-y) (loop :for (x . y) :in pts
-                                                       :minimizing x :into min-x
-                                                       :minimizing y :into min-y
-                                                       :maximizing x :into max-x
-                                                       :maximizing y :into max-y
+  (multiple-value-bind (min-x min-y max-x max-y) (loop :for pt :in pts
+                                                       :minimizing (pt-x pt) :into min-x
+                                                       :maximizing (pt-x pt) :into max-x
+
+                                                       :minimizing (pt-y pt) :into min-y
+                                                       :maximizing (pt-y pt) :into max-y
                                                        :finally (return (values min-x min-y max-x max-y)))
-    (let ((pts pts))
+    (let ((pts (sort (copy-list pts) #'pt-<)))
       (loop
         :for y :from min-y :to max-y :do
           (loop :for x :from min-x :to max-x
-                :for elem = (cons x y)
+                :for elem = (pt x y)
                 :do
                    (cond
-                     ((find elem pts :test #'equal)
-                      (setf pts (delete elem pts))
+                     ((find elem pts :test #'pt-=)
+                      (setf pts (delete elem pts :test #'pt-=))
                       (format stream "O"))
                      (t (format stream "."))))
           (format stream "~%"))))
   pts)
-
-(defparameter *game-file-dirs* (list (asdf:system-relative-pathname :cl-hashlife "game-files/")
-                                     "~/data/life_games/"
-                                     "~/src/hashlife/lifep/"))
-
 
 (defun find-game-file (fname)
   (loop
@@ -317,57 +385,53 @@
            (read-rle-stream stream)))))
 
 (defun write-game-file (pts file-name &optional (comment "Written by cl-hashlife"))
-  (let ((pts (if (eq (type-of (caar pts)) 'cons)
-                 (mapcar #'car pts)
-                 pts)))
-    (cond ((str:ends-with? ".life" file-name)
-           (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
-                                   :direction :output
-                                   :if-exists :supersede
-                                   :external-format :utf8)
-             (write-life-1.06-stream stream pts comment)))
-          ((str:ends-with? ".cells" file-name)
-           (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
-                                   :direction :output
-                                   :if-exists :supersede
-                                   :external-format :utf8)
-             (write-cells-stream stream pts comment))))))
+  (cond ((str:ends-with? ".life" file-name)
+         (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
+                                 :direction :output
+                                 :if-exists :supersede
+                                 :external-format :utf8)
+           (write-life-1.06-stream stream pts comment)))
+        ((str:ends-with? ".cells" file-name)
+         (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
+                                 :direction :output
+                                 :if-exists :supersede
+                                 :external-format :utf8)
+           (write-cells-stream stream pts comment)))))
 
 
 (defun show-life-game (stream pts &optional (level 0))
   (flet ((normalize (x)
            (ash x level))
          (denormalize (x)
-           (ash x level)))
+           (ash x (- level))))
     (let ((cnt 0)
-          (remaining-pts (sort (if (eq (type-of (caar pts)) 'cons)
-                                   (copy-list pts)
-                                   (mapcar (lambda (x) (cons x 1)) pts))
-                               #'point-less
-                               :key #'car)))
+          (remaining-pts (sort pts
+                               #'pt-<)))
       (format t "~a~%" remaining-pts)
-      (multiple-value-bind (min-x min-y max-x max-y) (loop :for ((x . y) . gray) :in remaining-pts
-                                                           :minimizing x :into min-x
-                                                           :minimizing y :into min-y
-                                                           :maximizing x :into max-x
-                                                           :maximizing y :into max-y
+      (multiple-value-bind (min-x min-y max-x max-y) (loop :for pt :in remaining-pts
+                                                           :minimizing (pt-x pt) :into min-x
+                                                           :minimizing (pt-y pt) :into min-y
+                                                           :maximizing (pt-x pt) :into max-x
+                                                           :maximizing (pt-y pt) :into max-y
                                                            :finally (return (values min-x min-y max-x max-y)))
         (loop
           :for y :from (normalize min-y) :to (normalize max-y) :do
             (loop :for x :from (normalize min-x) :to (normalize max-x)
-                  :for elem = (cons (denormalize x) (denormalize y))
+                  :for elem = (pt (denormalize x) (denormalize y))
                   :do
-                     (let ((it (find elem remaining-pts :test #'equal :key #'car)))
-                       (cond (it
-                              (setf remaining-pts (remove elem remaining-pts :test #'equal :key #'car))
-                              (incf cnt)
-                              (cond ((> (cdr it) 0.7)
-                                     (format stream "██"))
-                                    ((> (cdr it) 0.5)
-                                     (format stream "▒▒"))
-                                    ((> (cdr it) 0.2)
-                                     (format stream "░░"))))
-                             (t (format stream "  ")))))
+                     (if-let ((it (find elem remaining-pts :test #'pt-= )))
+                       (progn
+                         ;;(declare (type life-point it))
+                         (setf remaining-pts (remove elem remaining-pts :test #'pt-=))
+                         (incf cnt)
+                         (with-slots (gray) it
+                           (cond ((> gray 0.7)
+                                  (format stream "██"))
+                                 ((> gray 0.5)
+                                  (format stream "▒▒"))
+                                 ((> gray 0.2)
+                                  (format stream "░░")))))
+                       (format stream "  ")))
             (format stream "~%")))
       (values pts remaining-pts cnt))))
 
@@ -381,7 +445,7 @@ the next generation."
 
   (clrhash *baseline-temp-table*)
   (loop
-    :for (x . y) :in pts
+    :for pt :in pts
     :do
        (loop
          :for a :in '(-1 0 1)
@@ -389,8 +453,8 @@ the next generation."
             (loop
               :for b :in '(-1 0 1)
               :do
-                 (incf (gethash (cons (+ x a)
-                                      (+ y b))
+                 (incf (gethash (cons (+ (pt-x pt) a)
+                                      (+ (pt-y pt) b))
                                 *baseline-temp-table*
                                 0)))))
   (loop
@@ -399,7 +463,7 @@ the next generation."
         :using (hash-value count)
     :when (or (= count 3)
               (and (= count 4)
-                   (find pt pts :test #'equal)))
+                   (find pt pts :test #'pt-=)))
       :collecting pt))
 
 

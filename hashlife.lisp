@@ -18,20 +18,10 @@
 
 (declaim (notinline get-zero)
          (type integer *mask*)
-         (inline center q-join life life-4x4 read-life-file show-life-game)
-         (optimize (speed 1) (space 3) (safety 3) (debug 3) (compilation-speed 0)))
+;;         (inline center q-join life life-4x4 read-life-file show-life-game)
+         (optimize (speed 1) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
 
 
-(deftype maybe-node () '(or null qtnode))
-
-(defstruct (qtnode (:conc-name q-) )
-  (k 0 :type integer )
-  (a nil :type maybe-node)
-  (b nil :type maybe-node)
-  (c nil :type maybe-node)
-  (d nil :type maybe-node)
-  (n nil :type integer)
-  (hash nil :type integer))
 
 (defun qtnode-hash-func (val)
   (sxhash (q-hash val)))
@@ -54,16 +44,16 @@
 (defparameter *off* (make-qtnode :k 0 :n 0 :hash 0)
   "Base level binary node 0")
 
-(defparameter *mask* (1- (ash 1 63)))
+(defparameter *mask* (1- (ash 1 62)))
 
 (defun compute-hash (a b c d)
-  (logand *mask*
-          (+ (q-k a)
-             2
-             (* 5131830419411 (q-hash a))
-             (* 3758991985019 (q-hash b))
-             (* 8973110871315 (q-hash c))
-             (* 4318490180473 (q-hash d)))))
+  (logand *mask* (+ (q-k a)
+                    2
+                    (* 5131830419411 (q-hash a))
+                    (* 3758991985019 (q-hash b))
+                    (* 8973110871315 (q-hash c))
+                    (* 4318490180473 (q-hash d)))))
+
 ;; (defun qtnode-list-hash (args)
 ;;   (sxhash (apply #'compute-hash args)))
 ;; (sb-ext:define-hash-table-test qtnode-hash-list #'qtnode-list-hash)
@@ -77,34 +67,46 @@
 
 ;;(fare-memoization:memoize 'q-join)
 ;;
-(defparameter *join-table* (make-hash-table))
+(defparameter *join-table* (make-hash-table :test 'equal))
+(defparameter *join-calls* 0)
 (defun q-join (a b c d)
   "Combine four children at level `k-1` to a new node at level `k`.
 If this is cached, return the cached node.
 Otherwise, create a new node, and add it to the cache."
   (declare (type qtnode a b c d))
+  (incf *join-calls*)
+  ;; (make-qtnode :k (1+ (q-k a))
+  ;;                                 :a a
+  ;;                                 :b b
+  ;;                                 :c c
+  ;;                                 :d d
+  ;;                                 :n (+ (q-n a)
+  ;;                                       (q-n b)
+  ;;                                       (q-n c)
+  ;;                                       (q-n d))
+  ;;                                 :hash (compute-hash a b c d))
   (let ((the-hash (compute-hash a b c d)))
     (multiple-value-bind (val found) (gethash the-hash *join-table*)
-      (cond (found
-             val)
-            (t
-             (setf (gethash the-hash *join-table*)
-                   (make-qtnode :k (1+ (q-k a))
-                                :a a
-                                :b b
-                                :c c
-                                :d d
-                                :n (+ (q-n a)
-                                      (q-n b)
-                                      (q-n c)
-                                      (q-n d))
-                                :hash (compute-hash a b c d)))
-             (gethash the-hash *join-table*))))))
-
+      (declare (ignorable val))
+      (if (not found)
+          (let ((val (make-qtnode :k (1+ (q-k a))
+                                  :a a
+                                  :b b
+                                  :c c
+                                  :d d
+                                  :n (+ (q-n a)
+                                        (q-n b)
+                                        (q-n c)
+                                        (q-n d))
+                                  :hash the-hash)))
+            (setf (gethash the-hash *join-table*) val)
+            val)
+          val)))
+  )
 
 
 ;;(fare-memoization:memoize 'get-zero)
-(defparameter *zero-table* (make-hash-table))
+(defparameter *zero-table* (make-hash-table :test 'equal))
 (defun get-zero (k)
   "Return an empty node at level `k`."
   (declare (type integer k))
@@ -134,10 +136,15 @@ Otherwise, create a new node, and add it to the cache."
        (q-join z c z z)
        (q-join d z z z)))))
 
-(defun life (a b c d e f g h i)
+(defun life (a b c
+             d e f
+             g h i)
   "The standard life rule, taking eight neighbors and a center cell E.
 Returns *on* if should be on, *off* otherwise."
-  (declare (type qtnode a b c d e f g h i ))
+  (declare (type qtnode
+                 a b c
+                 d e f
+                 g h i ))
   (let* ((outer (loop :for node
                            :in (list a b c
                                      d   f
@@ -145,8 +152,7 @@ Returns *on* if should be on, *off* otherwise."
                          :summing (q-n node))))
     (declare (type integer outer))
     (if (or (= outer 3)
-            (and (q-n e)
-                 (= outer 2)))
+            (= 2 outer(q-n e)))
         *on*
         *off*)))
 
@@ -165,16 +171,24 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
             (q-join
              ;; Copy/pasted from. .(find-file-other-window "~/src/hashlife/hashlife.py" )
              ;; na = life(m.a.a, m.a.b, m.b.a, m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a)  # AD
-             (life        m.a.a  m.a.b  m.b.a  m.a.c  m.a.d  m.b.c  m.c.a  m.c.b  m.d.a)
+             (life        m.a.a  m.a.b  m.b.a
+                          m.a.c  m.a.d  m.b.c
+                          m.c.a  m.c.b  m.d.a)
 
              ;; nb = life(m.a.b, m.b.a, m.b.b, m.a.d, m.b.c, m.b.d, m.c.b, m.d.a, m.d.b)  # BC
-             (life        m.a.b  m.b.a  m.b.b  m.a.d  m.b.c  m.b.d  m.c.b  m.d.a  m.d.b)
+             (life        m.a.b  m.b.a  m.b.b
+                          m.a.d  m.b.c  m.b.d
+                          m.c.b  m.d.a  m.d.b)
 
              ;; nc = life(m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a, m.c.c, m.c.d, m.d.c)  # CB
-             (life        m.a.c  m.a.d  m.b.c  m.c.a  m.c.b  m.d.a  m.c.c  m.c.d  m.d.c)
+             (life        m.a.c  m.a.d  m.b.c
+                          m.c.a  m.c.b  m.d.a
+                          m.c.c  m.c.d  m.d.c)
 
              ;; nd = life(m.a.d, m.b.c, m.b.d, m.c.b, m.d.a, m.d.b, m.c.d, m.d.c, m.d.d)  # DA
-             (life        m.a.d  m.b.c  m.b.d  m.c.b  m.d.a  m.d.b  m.c.d  m.d.c  m.d.d))))))))
+             (life        m.a.d  m.b.c  m.b.d
+                          m.c.b  m.d.a  m.d.b
+                          m.c.d  m.d.c  m.d.d))))))))
 
 
 
@@ -184,10 +198,13 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
   "Return the 2**k-1 x 2**k-1 successor, 2**j generations in the future,
 where j<= k-2, caching the result."
   (declare (type qtnode m)
-           (type integer j))
+           (type (or null integer)  j))
+
   (let ((the-hash (cons (q-hash m) j)))
+;;    (format t "m: ~a - hash: ~a~%" m the-hash)
     (multiple-value-bind (val found) (gethash the-hash *successor-table*)
       (cond (found
+             ;;             (format t "Cached: ~a~%" val)
              val)
             (t
              (setf (gethash the-hash *successor-table*)
@@ -197,135 +214,146 @@ where j<= k-2, caching the result."
                      ((= (q-k m) 2)
                       (life-4x4 m))
                      (t
-                      (with-slots ((ma a) (mb b) (mc c) (md d)) m
-                        (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) ma
-                          (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) mb
-                            (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) mc
-                              (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) md
+                      (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) m
+                        (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) m.a
+                          (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) m.b
+                            (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) m.c
+                              (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) m.d
+                                (let ((j (min j (- (q-k m) 2))))
+                                  (let (
+                                        ;; Top Row
+                                        (c1 (successor m.a j))
+                                        (c2 (successor (q-join m.a.b  m.b.a
+                                                               m.a.d  m.b.c)
+                                                       j))
+                                        (c3 (successor m.b j))
 
-                                (let (
-                                      ;; c1 = successor(join(m.a.a, m.a.b, m.a.c, m.a.d), j)
-                                      (c1 (successor (q-join m.a.a  m.a.b  m.a.c  m.a.d)  j))
+                                        ;; Middle Row
+                                        (c4 (successor (q-join m.a.c  m.a.d
+                                                               m.c.a  m.c.b)
+                                                       j))
+                                        (c5 (successor (q-join m.a.d  m.b.c
+                                                               m.c.b  m.d.a)
+                                                       j))
+                                        (c6 (successor (q-join m.b.c  m.b.d
+                                                               m.d.a  m.d.b)
+                                                       j))
 
-                                      ;; c2 = successor(join(m.a.b, m.b.a, m.a.d, m.b.c), j)
-                                      (c2 (successor (q-join m.a.b  m.b.a  m.a.d  m.b.c)  j))
+                                        ;; Bottom row
+                                        (c7 (successor m.c j))
+                                        (c8 (successor (q-join m.c.b  m.d.a
+                                                               m.c.d  m.d.c)
+                                                       j))
+                                        (c9 (successor m.d j)))
 
+                                    (if (< j (- (q-k m) 2))
+                                        (progn
+                                               (q-join
+                                                (q-join (q-d c1) (q-c c2)
+                                                        (q-b c4) (q-a c5))
+                                                (q-join (q-d c2) (q-c c3)
+                                                        (q-b c5) (q-a c6))
 
-                                      ;; c3 = successor(join(m.b.a, m.b.b, m.b.c, m.b.d), j)
-                                      (c3 (successor (q-join m.b.a  m.b.b  m.b.c  m.b.d)  j))
-
-                                      ;; c4 = successor(join(m.a.c, m.a.d, m.c.a, m.c.b), j)
-                                      (c4 (successor (q-join m.a.c  m.a.d  m.c.a  m.c.b)  j))
-
-                                      ;; c5 = successor(join(m.a.d, m.b.c, m.c.b, m.d.a), j)
-                                      (c5 (successor (q-join m.a.d  m.b.c  m.c.b  m.d.a)  j))
-
-                                      ;; c6 = successor(join(m.b.c, m.b.d, m.d.a, m.d.b), j)
-                                      (c6 (successor (q-join m.b.c  m.b.d  m.d.a  m.d.b)  j))
-
-                                      ;; c7 = successor(join(m.c.a, m.c.b, m.c.c, m.c.d), j)
-                                      (c7 (successor (q-join m.c.a  m.c.b  m.c.c  m.c.d)  j))
-
-                                      ;; c8 = successor(join(m.c.b, m.d.a, m.c.d, m.d.c), j)
-                                      (c8 (successor (q-join m.c.b  m.d.a  m.c.d  m.d.c)  j))
-
-                                      ;; c9 = successor(join(m.d.a, m.d.b, m.d.c, m.d.d), j)
-                                      (c9 (successor (q-join m.d.a  m.d.b  m.d.c  m.d.d)  j)))
-                                  (if (< j (- (q-k m) 2))
-                                      (q-join
-                                       (q-join (q-d c1) (q-c c2)
-                                               (q-b c4) (q-a c5))
-                                       (q-join (q-d c2) (q-c c3)
-                                               (q-b c5) (q-a c6))
-
-                                       (q-join (q-d c4) (q-c c5)
-                                               (q-b c7) (q-a c8))
-                                       (q-join (q-d c5) (q-c c6)
-                                               (q-b c8) (q-a c9)))
-                                      (q-join
-                                       (successor (q-join c1 c2
-                                                          c4 c5)
-                                                  j)
-                                       (successor (q-join c2 c3
-                                                          c5 c6)
-                                                  j)
-                                       (successor (q-join c4 c5
-                                                          c7 c8)
-                                                  j)
-                                       (successor (q-join c5 c6
-                                                          c8 c9)
-                                                  j)))))))))))))))))
+                                                (q-join (q-d c4) (q-c c5)
+                                                        (q-b c7) (q-a c8))
+                                                (q-join (q-d c5) (q-c c6)
+                                                        (q-b c8) (q-a c9))))
+                                        (progn
+                                               (q-join
+                                                (successor (q-join c1 c2
+                                                                   c4 c5)
+                                                           j)
+                                                (successor (q-join c2 c3
+                                                                   c5 c6)
+                                                           j)
+                                                (successor (q-join c4 c5
+                                                                   c7 c8)
+                                                           j)
+                                                (successor (q-join c5 c6
+                                                                   c8 c9)
+                                                           j))))))))))))))
+             (gethash the-hash *successor-table*))))))
 
 
 
 (defun construct (pts)
   "Turn a list of x y coordinates into a quadtree and return the top level node."
 
-  (let* ((mins (loop :for (x . y) :in pts
-                     :minimizing x :into min-x
-                     :minimizing y :into min-y
-                     :finally (return (cons min-x min-y))))
-         (pattern (mapcar (lambda (pt)
-                                (cons
-                                 (cons (- (car pt)
-                                          (car mins))
-                                       (- (cdr pt)
-                                          (cdr mins)))
-                                 *on*))
-                              pts)))
+  (let* ((min-pt (loop
+                 :for pt :in pts
+                 :minimizing (pt-x pt) :into min-x
+                 :minimizing (pt-y pt) :into min-y
+                 :finally (return (pt min-x min-y *on*))))
+         (pattern (mapcar
+                   (lambda (pt)
+                     (pt (- (pt-x pt) (pt-x min-pt))
+                         (- (pt-y pt) (pt-y min-pt))
+                         *on*))
+                   pts)))
     (pad
      (loop
        :while (/= 1 (length pattern))
        :for k :from 0
        :for z = (get-zero k)
-       :for next-pattern = (loop
-                             :while (> (length pattern)
-                                       0)
+       :for next-pattern
+         = (loop
+             :while (> (length pattern)
+                       0)
 
-                             :for ((x . y) . gray) = (car pattern)
-                               :then (car pattern)
+             :for pt = (car pattern)
+               :then (car pattern)
 
-                             :for even-x = (- x (logand x 1))
-                             :for even-y = (- y (logand y 1))
+             :for ept = (even-pt pt)
 
-                             :for a = (find (cons even-x even-y)
-                                            pattern
-                                            :test #'equal :key #'car)
+             :for a = (find ept
+                            pattern
+                            :test #'pt-=)
 
-                             :for b = (find (cons (1+ even-x) even-y)
-                                            pattern
-                                            :test #'equal :key #'car)
+             :for b = (find (right-pt ept)
+                            pattern
+                            :test #'pt-=)
 
-                             :for c = (find (cons even-x (1+ even-y))
-                                            pattern
-                                            :test #'equal :key #'car)
+             :for c = (find (down-pt ept)
+                            pattern
+                            :test #'pt-=)
 
-                             :for d = (find (cons (1+ even-x) (1+ even-y))
-                                            pattern
-                                            :test #'equal :key #'car)
-                             :collecting (cons (cons (ash even-x -1)
-                                                     (ash even-y -1))
-                                               (q-join (if a (cdr a) z)
-                                                       (if b (cdr b) z)
-                                                       (if c (cdr c) z)
-                                                       (if d (cdr d) z)))
-                               :into next-level
-                             :do
-                                (setf pattern
-                                      (remove (car a)
-                                              (remove (car b)
-                                                      (remove (car c)
-                                                              (remove (car d)
-                                                                      pattern
-                                                                      :test #'equal :key #'car)
-                                                              :test #'equal :key #'car)
-                                                      :test #'equal :key #'car)
-                                              :test #'equal :key #'car))
-                             :finally (return next-level))
+             :for d = (find (corner-pt ept)
+                            pattern
+                            :test #'pt-=)
+
+             :collecting (pt (ash (pt-x ept) -1)
+                             (ash (pt-y ept) -1)
+                             (q-join (if a
+                                         (pt-gray a)
+                                         z)
+                                     (if b
+                                         (pt-gray b)
+                                         z)
+                                     (if c
+                                         (pt-gray c)
+                                         z)
+                                     (if d
+                                         (pt-gray d)
+                                         z)))
+               :into next-level
+             :do
+                (when a
+                  (setf pattern
+                        (remove a pattern :test #'pt-=)))
+                (when b
+                  (setf pattern
+                        (remove b pattern :test #'pt-=)))
+                (when c
+                  (setf pattern
+                        (remove c pattern :test #'pt-=)))
+                (when d
+                  (setf pattern
+                        (remove d pattern :test #'pt-=)))
+             :finally (return next-level))
        :do
           (setf pattern next-pattern)
           ;; Return quadtree node from ( (x . y) . qtnode) pair
-       :finally (return (cdar pattern))))))
+       :finally (return (pt-gray (car pattern)))))))
 
 (defun inner (node)
   (q-join (q-d (q-a node))
@@ -336,9 +364,9 @@ where j<= k-2, caching the result."
 (defun crop (node)
   (cond ((or (<= (q-k node) 3 )
              (not (is-padded node)))
-         (pad (center node)))
+         node)
         (t
-         node)))
+         (crop (inner node)))))
 
 (defun ffwd (node n)
   (loop
@@ -381,32 +409,22 @@ expansion of n to find the correct successors."
        :finally (return node)))))
 
 (defun is-padded (node)
-  (and ;; (q-a node)
-       ;; (q-b node)
-       ;; (q-c node)
-       ;; (q-d node)
-       ;; (q-d (q-a node))
-       ;; (q-c (q-b node))
-       ;; (q-b (q-c node))
-       ;; (q-a (q-d node))
-       ;; (q-d (q-d (q-a node)))
-       ;; (q-c (q-c (q-b node)))
-       ;; (q-b (q-b (q-c node)))
-       ;; (q-a (q-a (q-d node)))
-       (= (q-n (q-a node))
-          (q-n (q-d (q-d (q-a node)))))
+  (with-slots (a b c d) node
+    (and ;; (q-a node)
+     (= (q-n a)
+        (q-n (q-d (q-d a))))
 
-       (= (q-n (q-b node))
-          (q-n (q-c (q-c (q-b node)))))
+     (= (q-n b)
+        (q-n (q-c (q-c b))))
 
-       (= (q-n (q-c node))
-          (q-n (q-b (q-b (q-c node)))))
+     (= (q-n c)
+        (q-n (q-b (q-b c))))
 
-       (= (q-n (q-d node))
-          (q-n (q-a (q-a (q-d node)))))))
+     (= (q-n d)
+        (q-n (q-a (q-a d)))))))
 
 (defun pad (node)
-  (if (and (<= 3 (q-k node))
+  (if (and (< 3 (q-k node))
           (not (is-padded node)))
       (pad (center node))
       node))
@@ -421,7 +439,6 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
   ;; Null or no cells on means skip over this whole quadtree
   (when (or (null node)
             (= 0 (q-n node)))
-    (format t "empty node node ~a n: ~a~%" node (if node (q-n node) nil))
     (return-from expand nil))
 
   (let* ((size (expt 2 (q-k node) ))
@@ -433,12 +450,11 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
             min-y
             max-x
             max-y
-            (or 
+            (or
              (< x  min-x)
              (< y  min-y)
              (> x  max-x)
              (> y  max-y)))
-       (format t "Clipping ~a ~a~%" x y)
        nil)
 
       ;; Collect cells at this zoom level
@@ -446,41 +462,48 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
 
        ;; Scale quadtree to match scale of level 0
        (let ((reduction (-
-                         (+ level  ;;  Higher levels cover more of the quadree
-                            (ash size -1))))))
-       (list
-        (cons (cons (ash x reduction)
-                    (ash y reduction))
+                         (+ level  ;;  Higher levels cover more of the quadtree
+                            offset
+                            ))))
+         (list
+          (pt (ash x reduction)
+              (ash y reduction)
               (/ (q-n node)
-                 (* size size)))))
+                 (* size size))))))
 
       ;; Otherwise try expanding the children
       (t
        (with-slots (a b c d) node
-         (concatenate 'list
+         ;; Merge sort
+         (merge 'list
+                (merge 'list
+                       (expand a
+                               :x x
+                               :y y
+                               :min-x min-x :max-x max-x
+                               :min-y min-y :max-y max-y
+                               :level level)
+                       (expand b
+                               :x (+ x offset)
+                               :y y
+                               :min-x min-x :max-x max-x
+                               :min-y min-y :max-y max-y
+                               :level level)
+                       #'pt-<)
+                (merge 'list
 
-                      (expand a
-                              :x x
-                              :y y
-                              :min-x min-x :max-x max-x
-                              :min-y min-y :max-y max-y
-                              :level level)
-                      (expand b
-                              :x (+ x offset)
-                              :y y
-                              :min-x min-x :max-x max-x
-                              :min-y min-y :max-y max-y
-                              :level level)
 
-                      (expand c
-                              :x x
-                              :y (+ y offset)
-                              :min-x min-x :max-x max-x
-                              :min-y min-y :max-y max-y
-                              :level level)
-                      (expand d
-                              :x (+ x offset)
-                              :y (+ y offset)
-                              :min-x min-x :max-x max-x
-                              :min-y min-y :max-y max-y
-                              :level level)))))))
+                       (expand c
+                               :x x
+                               :y (+ y offset)
+                               :min-x min-x :max-x max-x
+                               :min-y min-y :max-y max-y
+                               :level level)
+                       (expand d
+                               :x (+ x offset)
+                               :y (+ y offset)
+                               :min-x min-x :max-x max-x
+                               :min-y min-y :max-y max-y
+                               :level level)
+                       #'pt-<)
+                #'pt-<))))))
