@@ -31,10 +31,10 @@
   (c nil :type maybe-node)
   (d nil :type maybe-node)
   (n nil :type integer)
-  (hash nil :type integer))
+  (hash nil :type fixnum))
 
 (defun get-address (node address)
-  (loop 
+  (loop
     :for next-node = node
       :then (slot-value next-node
                         (intern
@@ -297,13 +297,15 @@
 
 (defun read-life-1.05-stream (stream)
   (loop
+    :for line-num :from 0
     :with off-x = 0
     :with off-y = 0
     :with this-y = 0
     :with header = (read-line stream nil nil)
     :for line = (read-line stream nil nil)
     :while line
-    :when (and (char= (aref line 0) #\#)
+    :when (and (> (length line) 2)
+               (char= (aref line 0) #\#)
                (char= (aref line 1) #\P))
       :do
          (multiple-value-bind (val offset)
@@ -311,16 +313,19 @@
            (setf off-x val)
            (setf off-y (read-from-string line nil nil :start offset))
            (setf this-y off-y))
-    :when (or (char= (aref line 0) #\.)
-              (char= (aref line 0) #\*))
-      :nconcing
+    :when (and (> (length line) 1)
+               (or
+                (char= (aref line 0) #\.)
+                (char= (aref line 0) #\*)))
+      :nconc
       (prog1
           (loop
             :for cell :across line
             :for this-x :from off-x
             :when (char= cell #\*)
               :collect (pt this-x this-y))
-        (incf this-y))))
+        (incf this-y))
+    ))
 
 (defun read-cells-stream (stream)
   (loop :for line = (loop ;; Skip beginning comment lines
@@ -362,27 +367,33 @@
   pts)
 
 (defun find-game-file (fname)
-  (loop
-    :for path :in *game-file-dirs*
-    :when (probe-file (merge-pathnames fname path))
-      :do
-         (return-from find-game-file (merge-pathnames fname path)))
-  fname)
+  (ctypecase fname
+    (string
+     (if (probe-file fname)
+         fname
+         (loop
+           :for path :in *game-file-dirs*
+           :do
+              (when-let (the-file (probe-file (merge-pathnames fname path)))
+                (return-from find-game-file (merge-pathnames fname path))))))
+    (pathname
+     (probe-file fname))))
 
 
-(defun read-game-file (file-name)
-  (cond ((str:ends-with? ".life" file-name :ignore-case t)
-         (with-open-file (stream (find-game-file file-name))
-           (read-life-1.06-stream stream)))
-        ((str:ends-with? ".lif" file-name :ignore-case t)
-         (with-open-file (stream (find-game-file file-name))
-           (read-life-1.05-stream stream)))
-        ((str:ends-with? ".cells" file-name :ignore-case t)
-         (with-open-file (stream (find-game-file file-name))
-           (read-cells-stream stream)))
-        ((str:ends-with? ".rle" file-name :ignore-case t)
-         (with-open-file (stream (find-game-file file-name))
-           (read-rle-stream stream)))))
+(defun find-reader (path)
+  (let ((readers `(("life" . ,#'read-life-1.06-stream)
+                   ("lif" . ,#'read-life-1.05-stream)
+                   ("cells" . ,#'read-cells-stream)
+                   ("rle" . ,#'read-rle-stream))))
+    (assoc-value readers
+                 (string-downcase (pathname-type path))
+                 :test #'string= )))
+
+(defun read-game-file (file-name-or-path)
+  (let ((path (find-game-file file-name-or-path)))
+    (with-open-file (stream path)
+      (funcall (find-reader path) stream))))
+
 
 (defun write-game-file (pts file-name &optional (comment "Written by cl-hashlife"))
   (cond ((str:ends-with? ".life" file-name)
@@ -407,7 +418,6 @@
     (let ((cnt 0)
           (remaining-pts (sort pts
                                #'pt-<)))
-      (format t "~a~%" remaining-pts)
       (multiple-value-bind (min-x min-y max-x max-y) (loop :for pt :in remaining-pts
                                                            :minimizing (pt-x pt) :into min-x
                                                            :minimizing (pt-y pt) :into min-y
@@ -433,7 +443,7 @@
                                   (format stream "░░")))))
                        (format stream "  ")))
             (format stream "~%")))
-      (values pts remaining-pts cnt))))
+      (values cnt))))
 
 (defparameter *baseline-temp-table* (make-hash-table :test 'equal :size 100)
   "Avoid excessive hash table allocation in baseline-life.")
@@ -443,28 +453,30 @@
 Takes a list of (x, y) cells and returns a new set of cells in
 the next generation."
 
-  (clrhash *baseline-temp-table*)
-  (loop
-    :for pt :in pts
-    :do
-       (loop
-         :for a :in '(-1 0 1)
-         :do
-            (loop
-              :for b :in '(-1 0 1)
-              :do
-                 (incf (gethash (cons (+ (pt-x pt) a)
-                                      (+ (pt-y pt) b))
-                                *baseline-temp-table*
-                                0)))))
-  (loop
-    :for pt
-      :being :the hash-keys :of *baseline-temp-table*
-        :using (hash-value count)
-    :when (or (= count 3)
-              (and (= count 4)
-                   (find pt pts :test #'pt-=)))
-      :collecting pt))
+  (let ((counter (make-hash-table :test 'equal :size 100)))
+
+    ;; Count neighbors
+    (loop
+      :for pt :in pts
+      :do
+         (loop
+           :for a :in '(-1 0 1)
+           :do
+              (loop
+                :for b :in '(-1 0 1)
+                :do
+                   (incf (gethash (pt (+ (pt-x pt) a)
+                                        (+ (pt-y pt) b))
+                                  counter
+                                  0)))))
+    (loop
+      :for pt
+        :being :the hash-keys :of counter
+          :using (hash-value count)
+      :when (or (= count 3)
+                (and (= count 4)
+                     (find pt pts :test #'pt-=)))
+        :collecting pt)))
 
 
 (defun iterate-game-of-life (file-name-or-game-data

@@ -16,10 +16,6 @@
 
 (in-package :cl-hashlife)
 
-(declaim (notinline get-zero)
-         (type integer *mask*)
-;;         (inline center q-join life life-4x4 read-life-file show-life-game)
-         (optimize (speed 1) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
 
 
 
@@ -28,11 +24,12 @@
 ;;(sb-ext:define-hash-table-test qtnode-hash qtnode-hash-func)
 
 (defmethod cl:print-object ((node qtnode) stream)
-  (with-slots (k n a b c d) node
-    (format stream "(qtnode (k ~a) (size ~a) (population ~a) (~a ~a ~a ~a))"
+  (with-slots (k n a b c d hash) node
+    (format stream "(qtnode (k ~a) (size ~a) (population ~a) (hash ~a) (~a ~a ~a ~a))"
             k
             (ash 1 k)
             n
+            hash
             (if a (q-n a) 0)
             (if b (q-n b) 0)
             (if c (q-n c) 0)
@@ -44,64 +41,81 @@
 (defparameter *off* (make-qtnode :k 0 :n 0 :hash 0)
   "Base level binary node 0")
 
-(defparameter *mask* (1- (ash 1 62)))
+(defparameter *mask* (1- (ash 1 63)))
+
+(defun to-64-bit (num)
+  (logand num (1-  (ash 1 62))))
 
 (defun compute-hash (a b c d)
-  (logand *mask* (+ (q-k a)
-                    2
-                    (* 5131830419411 (q-hash a))
-                    (* 3758991985019 (q-hash b))
-                    (* 8973110871315 (q-hash c))
-                    (* 4318490180473 (q-hash d)))))
+  ;; (let ((val (logand (1- (ash 1 63))
+  ;;                    (+ (q-k a)
+  ;;                       2
+  ;;                       (* 5131830419411 (q-hash a))
+  ;;                       (* 3758991985019 (q-hash b))
+  ;;                       (* 8973110871315 (q-hash c))
+  ;;                       (* 4318490180473 (q-hash d))))))
+  ;;   val)
+  (declare (optimize (speed 3) (space 3) (safety 0) (debug 0)))
+  (+ (q-k a)
+     2
+     (to-64-bit
+      (logxor
+       (to-64-bit
+        (*
+         (to-64-bit
+          (logxor
+           (to-64-bit
+            (*
+             (to-64-bit
+              (logxor
+               (to-64-bit
+                (* (q-hash a)
+                   4318490180473))
+               (q-hash b)))
+             3758991985019))
+           (q-hash c)))
+         8973110871315))
+       (q-hash d)))))
 
-;; (defun qtnode-list-hash (args)
-;;   (sxhash (apply #'compute-hash args)))
-;; (sb-ext:define-hash-table-test qtnode-hash-list #'qtnode-list-hash)
-
-;; (defun q-hash-list (vals)
-;;   (apply #'compute-hash vals))
-;; (sb-ext:define-hash-table-test qtnode-list-hash #'q-hash-list)
-
-;; (defun compute-hash-list (as-list)
-;;   (apply #'compute-hash as-list))
-
-;;(fare-memoization:memoize 'q-join)
-;;
-(defparameter *join-table* (make-hash-table :test 'equal))
-(defparameter *join-calls* 0)
+(defparameter *join-table* (make-hash-table :test 'eql))
+(defparameter *join-calls* nil)
 (defun q-join (a b c d)
   "Combine four children at level `k-1` to a new node at level `k`.
 If this is cached, return the cached node.
 Otherwise, create a new node, and add it to the cache."
   (declare (type qtnode a b c d))
-  (incf *join-calls*)
-  ;; (make-qtnode :k (1+ (q-k a))
-  ;;                                 :a a
-  ;;                                 :b b
-  ;;                                 :c c
-  ;;                                 :d d
-  ;;                                 :n (+ (q-n a)
-  ;;                                       (q-n b)
-  ;;                                       (q-n c)
-  ;;                                       (q-n d))
-  ;;                                 :hash (compute-hash a b c d))
-  (let ((the-hash (compute-hash a b c d)))
-    (multiple-value-bind (val found) (gethash the-hash *join-table*)
-      (declare (ignorable val))
-      (if (not found)
-          (let ((val (make-qtnode :k (1+ (q-k a))
-                                  :a a
-                                  :b b
-                                  :c c
-                                  :d d
-                                  :n (+ (q-n a)
-                                        (q-n b)
-                                        (q-n c)
-                                        (q-n d))
-                                  :hash the-hash)))
-            (setf (gethash the-hash *join-table*) val)
-            val)
-          val)))
+
+  (let ((rval (make-qtnode :k (1+ (q-k a))
+                           :a a
+                           :b b
+                           :c c
+                           :d d
+                           :n (+ (q-n a)
+                                 (q-n b)
+                                 (q-n c)
+                                 (q-n d))
+                           :hash (compute-hash a b c d))))
+    (setf (gethash (compute-hash a b c d) *join-table*) rval)
+    rval)
+
+  ;; (let ((the-hash (compute-hash a b c d)))
+  ;;   (multiple-value-bind (val found) (gethash the-hash *join-table*)
+  ;;     (declare (ignorable val))
+  ;;     (when (not found)
+  ;;       (setf (gethash the-hash *join-table*)
+  ;;             (make-qtnode :k (1+ (q-k a))
+  ;;                          :a a
+  ;;                          :b b
+  ;;                          :c c
+  ;;                          :d d
+  ;;                          :n (+ (q-n a)
+  ;;                                (q-n b)
+  ;;                                (q-n c)
+  ;;                                (q-n d))
+  ;;                          :hash the-hash))
+  ;;       )
+  ;;     (push (list the-hash a b c d) *join-calls*)
+  ;;     (gethash the-hash *join-table*)))
   )
 
 
@@ -198,13 +212,14 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
   "Return the 2**k-1 x 2**k-1 successor, 2**j generations in the future,
 where j<= k-2, caching the result."
   (declare (type qtnode m)
-           (type (or null integer)  j))
+           (type (or integer)  j))
 
-  (let ((the-hash (cons (q-hash m) j)))
-;;    (format t "m: ~a - hash: ~a~%" m the-hash)
+  (let* ((real-j (min j (- (q-k m) 2)))
+         (the-hash (cons (q-hash m) real-j)))
+    ;;    (format t "m: ~a - hash: ~a~%" m the-hash)
     (multiple-value-bind (val found) (gethash the-hash *successor-table*)
       (cond (found
-             ;;             (format t "Cached: ~a~%" val)
+;;                         (format t "Cached: ~a~%" the-hash)
              val)
             (t
              (setf (gethash the-hash *successor-table*)
@@ -222,7 +237,10 @@ where j<= k-2, caching the result."
                                 (let ((j (min j (- (q-k m) 2))))
                                   (let (
                                         ;; Top Row
-                                        (c1 (successor m.a j))
+                                        (c1 (successor (q-join m.a.a m.a.b
+                                                               m.a.c m.a.d)
+                                                       j))
+
                                         (c2 (successor (q-join m.a.b  m.b.a
                                                                m.a.d  m.b.c)
                                                        j))
@@ -240,38 +258,40 @@ where j<= k-2, caching the result."
                                                        j))
 
                                         ;; Bottom row
-                                        (c7 (successor m.c j))
+                                        (c7 (successor (q-join m.c.a m.c.b
+                                                               m.c.c m.c.d)
+                                                       j))
                                         (c8 (successor (q-join m.c.b  m.d.a
                                                                m.c.d  m.d.c)
                                                        j))
                                         (c9 (successor m.d j)))
 
-                                    (if (< j (- (q-k m) 2))
+                                    (if (< j (- (q-k m) 2) )
                                         (progn
-                                               (q-join
-                                                (q-join (q-d c1) (q-c c2)
-                                                        (q-b c4) (q-a c5))
-                                                (q-join (q-d c2) (q-c c3)
-                                                        (q-b c5) (q-a c6))
+                                          (q-join
+                                           (q-join (q-d c1) (q-c c2)
+                                                   (q-b c4) (q-a c5))
+                                           (q-join (q-d c2) (q-c c3)
+                                                   (q-b c5) (q-a c6))
 
-                                                (q-join (q-d c4) (q-c c5)
-                                                        (q-b c7) (q-a c8))
-                                                (q-join (q-d c5) (q-c c6)
-                                                        (q-b c8) (q-a c9))))
+                                           (q-join (q-d c4) (q-c c5)
+                                                   (q-b c7) (q-a c8))
+                                           (q-join (q-d c5) (q-c c6)
+                                                   (q-b c8) (q-a c9))))
                                         (progn
-                                               (q-join
-                                                (successor (q-join c1 c2
-                                                                   c4 c5)
-                                                           j)
-                                                (successor (q-join c2 c3
-                                                                   c5 c6)
-                                                           j)
-                                                (successor (q-join c4 c5
-                                                                   c7 c8)
-                                                           j)
-                                                (successor (q-join c5 c6
-                                                                   c8 c9)
-                                                           j))))))))))))))
+                                          (q-join
+                                           (successor (q-join c1 c2
+                                                              c4 c5)
+                                                      j)
+                                           (successor (q-join c2 c3
+                                                              c5 c6)
+                                                      j)
+                                           (successor (q-join c4 c5
+                                                              c7 c8)
+                                                      j)
+                                           (successor (q-join c5 c6
+                                                              c8 c9)
+                                                      j))))))))))))))
              (gethash the-hash *successor-table*))))))
 
 
@@ -301,7 +321,6 @@ where j<= k-2, caching the result."
                        0)
 
              :for pt = (car pattern)
-               :then (car pattern)
 
              :for ept = (even-pt pt)
 

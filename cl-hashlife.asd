@@ -24,5 +24,5 @@
   :components ((:file "package")
                (:file "utilities")
                (:file "hashlife"))
-               
+
   :in-order-to ((test-op (test-op cl-hashlife.test))))
