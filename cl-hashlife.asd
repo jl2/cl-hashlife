@@ -20,7 +20,7 @@
   :license  "ISC"
   :version "0.0.1"
   :serial t
-  :depends-on (#:j-utils #:alexandria #:str #:fare-memoization)
+  :depends-on (#:j-utils #:alexandria #:str)
   :components ((:file "package")
                (:file "utilities")
                (:file "hashlife"))

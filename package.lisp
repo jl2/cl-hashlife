@@ -86,4 +86,7 @@
            #:q-b
            #:q-c
            #:q-d
+
+           #:join-table-stats
+           #:successor-table-stats
            ))

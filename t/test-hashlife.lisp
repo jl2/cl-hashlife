@@ -50,7 +50,9 @@
            four-peat)))
 
 (test bootstrap
-    (loop
+  (clrhash hl::*join-table*)
+  (clrhash hl::*successor-table*)
+  (loop
       :for i :below 2 :do
         (let* ((boot-2x2 (product-tree (list hl::*on* hl::*off*)))
                (boot-4x4 (product-tree boot-2x2)))
@@ -84,7 +86,7 @@
 
 (test ffwd-large
   (let ((node (hl::construct (hl::read-game-file "BREEDER.LIF"))))
-    (hl::ffwd node 64)))
+    (validate-tree (hl::ffwd node 64))))
 
 (test get-zero
   (loop :for i :below 32
@@ -140,11 +142,11 @@
       (is (>= (hl::pt-y pt) y1))
       (is (< (hl::pt-y pt) y2)))))
 
-;; (test all-patterns
-;;   (loop :for fname :in (uiop:directory-files "~/src/hashlife/lifep/" "*.LIF")
-;;         :for i :below 4
-;;         :do
-;;            (verify-baseline (hl::read-game-file fname) 64)))
+(test all-patterns
+  (loop :for fname :in (uiop:directory-files "~/src/hashlife/lifep/" "*.LIF")
+        :for i :below 4
+        :do
+           (verify-baseline (hl::read-game-file fname) 64)))
 
 (test clip
   (let* ((pat (hl::read-game-file "BREEDER.LIF"))

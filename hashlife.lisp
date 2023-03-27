@@ -16,7 +16,7 @@
 
 (in-package :cl-hashlife)
 
-
+(declaim (optimize (debug 3)))
 
 
 (defun qtnode-hash-func (val)
@@ -25,7 +25,8 @@
 
 (defmethod cl:print-object ((node qtnode) stream)
   (with-slots (k n a b c d hash) node
-    (format stream "(qtnode (k ~a) (size ~a) (population ~a) (hash ~a) (~a ~a ~a ~a))"
+    (format stream
+            "(qtnode (k ~a) (size ~a) (population ~a) (hash ~a) (~a ~a ~a ~a))"
             k
             (ash 1 k)
             n
@@ -79,31 +80,22 @@
 
 (defparameter *join-table* (make-hash-table :test 'eql))
 (defparameter *join-calls* nil)
+
+(defun join-table-stats ()
+    (loop
+      :for pt
+        :being :the hash-keys :of *join-table*
+          :using (hash-value node)
+      :when (or (> (q-n node) 2))
+        :collecting node))
+
 (defun q-join (a b c d)
   "Combine four children at level `k-1` to a new node at level `k`.
 If this is cached, return the cached node.
 Otherwise, create a new node, and add it to the cache."
   (declare (type qtnode a b c d))
 
-  (let ((rval (make-qtnode :k (1+ (q-k a))
-                           :a a
-                           :b b
-                           :c c
-                           :d d
-                           :n (+ (q-n a)
-                                 (q-n b)
-                                 (q-n c)
-                                 (q-n d))
-                           :hash (compute-hash a b c d))))
-    (setf (gethash (compute-hash a b c d) *join-table*) rval)
-    rval)
-
-  ;; (let ((the-hash (compute-hash a b c d)))
-  ;;   (multiple-value-bind (val found) (gethash the-hash *join-table*)
-  ;;     (declare (ignorable val))
-  ;;     (when (not found)
-  ;;       (setf (gethash the-hash *join-table*)
-  ;;             (make-qtnode :k (1+ (q-k a))
+  ;; (let ((rval (make-qtnode :k (1+ (q-k a))
   ;;                          :a a
   ;;                          :b b
   ;;                          :c c
@@ -112,10 +104,28 @@ Otherwise, create a new node, and add it to the cache."
   ;;                                (q-n b)
   ;;                                (q-n c)
   ;;                                (q-n d))
-  ;;                          :hash the-hash))
-  ;;       )
-  ;;     (push (list the-hash a b c d) *join-calls*)
-  ;;     (gethash the-hash *join-table*)))
+  ;;                          :hash (compute-hash a b c d))))
+  ;;   (setf (gethash (compute-hash a b c d) *join-table*) rval)
+  ;;   rval)
+
+  (let ((the-hash (compute-hash a b c d)))
+    (multiple-value-bind (val found) (gethash the-hash *join-table*)
+      (declare (ignorable val))
+      (when (not found)
+        (setf (gethash the-hash *join-table*)
+              (make-qtnode :k (1+ (q-k a))
+                           :a a
+                           :b b
+                           :c c
+                           :d d
+                           :n (+ (q-n a)
+                                 (q-n b)
+                                 (q-n c)
+                                 (q-n d))
+                           :hash the-hash))
+        )
+      (push (list the-hash a b c d) *join-calls*)
+      (gethash the-hash *join-table*)))
   )
 
 
@@ -160,10 +170,10 @@ Returns *on* if should be on, *off* otherwise."
                  d e f
                  g h i ))
   (let* ((outer (loop :for node
-                           :in (list a b c
-                                     d   f
-                                     g h i)
-                         :summing (q-n node))))
+                        :in (list a b c
+                                  d   f
+                                  g h i)
+                      :summing (q-n node))))
     (declare (type integer outer))
     (if (or (= outer 3)
             (= 2 outer(q-n e)))
@@ -208,91 +218,101 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
 
 (defparameter *successor-table* (make-hash-table :test 'equal))
 
-(defun successor (m &optional (j (- (q-k m) 2)))
+(defun inner-successors (m j)
+  (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) m
+    (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) m.a
+      (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) m.b
+        (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) m.c
+          (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) m.d
+            (let (
+                  ;; Top Row
+                  (c1 (successor (q-join m.a.a m.a.b
+                                         m.a.c m.a.d)
+                                 j))
+
+                  (c2 (successor (q-join m.a.b  m.b.a
+                                         m.a.d  m.b.c)
+                                 j))
+                  (c3 (successor (q-join m.b.a m.b.b
+                                         m.b.c m.b.c)
+                                 j))
+
+                  ;; Middle Row
+                  (c4 (successor (q-join m.a.c  m.a.d
+                                         m.c.a  m.c.b)
+                                 j))
+                  (c5 (successor (q-join m.a.d  m.b.c
+                                         m.c.b  m.d.a)
+                                 j))
+                  (c6 (successor (q-join m.b.c  m.b.d
+                                         m.d.a  m.d.b)
+                                 j))
+
+                  ;; Bottom row
+                  (c7 (successor (q-join m.c.a m.c.b
+                                         m.c.c m.c.d)
+                                 j))
+                  (c8 (successor (q-join m.c.b  m.d.a
+                                         m.c.d  m.d.c)
+                                 j))
+                  (c9 (successor (q-join m.d.a m.d.b
+                                         m.d.c m.d.d)
+                                 j)))
+              (values c1 c2 c3 c4 c5 c6 c7 c8 c9))))))))
+
+(defun successor (m &optional in-j)
   "Return the 2**k-1 x 2**k-1 successor, 2**j generations in the future,
 where j<= k-2, caching the result."
   (declare (type qtnode m)
-           (type (or integer)  j))
-
-  (let* ((real-j (min j (- (q-k m) 2)))
-         (the-hash (cons (q-hash m) real-j)))
-    ;;    (format t "m: ~a - hash: ~a~%" m the-hash)
+           (type (or null integer)  in-j))
+  (let* ((j (if (null in-j)
+                (- (q-k m) 2)
+                (min in-j (- (q-k m) 2))))
+         (the-hash (cons (q-hash m) j)))
+    (when (< j 0)
+      (error "j ~a < 0" j))
     (multiple-value-bind (val found) (gethash the-hash *successor-table*)
-      (cond (found
-;;                         (format t "Cached: ~a~%" the-hash)
-             val)
-            (t
-             (setf (gethash the-hash *successor-table*)
-                   (cond
-                     ((= (q-n m) 0)
-                      (q-a m))
-                     ((= (q-k m) 2)
-                      (life-4x4 m))
-                     (t
-                      (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) m
-                        (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) m.a
-                          (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) m.b
-                            (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) m.c
-                              (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) m.d
-                                (let ((j (min j (- (q-k m) 2))))
-                                  (let (
-                                        ;; Top Row
-                                        (c1 (successor (q-join m.a.a m.a.b
-                                                               m.a.c m.a.d)
-                                                       j))
-
-                                        (c2 (successor (q-join m.a.b  m.b.a
-                                                               m.a.d  m.b.c)
-                                                       j))
-                                        (c3 (successor m.b j))
-
-                                        ;; Middle Row
-                                        (c4 (successor (q-join m.a.c  m.a.d
-                                                               m.c.a  m.c.b)
-                                                       j))
-                                        (c5 (successor (q-join m.a.d  m.b.c
-                                                               m.c.b  m.d.a)
-                                                       j))
-                                        (c6 (successor (q-join m.b.c  m.b.d
-                                                               m.d.a  m.d.b)
-                                                       j))
-
-                                        ;; Bottom row
-                                        (c7 (successor (q-join m.c.a m.c.b
-                                                               m.c.c m.c.d)
-                                                       j))
-                                        (c8 (successor (q-join m.c.b  m.d.a
-                                                               m.c.d  m.d.c)
-                                                       j))
-                                        (c9 (successor m.d j)))
-
-                                    (if (< j (- (q-k m) 2) )
-                                        (progn
-                                          (q-join
-                                           (q-join (q-d c1) (q-c c2)
-                                                   (q-b c4) (q-a c5))
-                                           (q-join (q-d c2) (q-c c3)
-                                                   (q-b c5) (q-a c6))
-
-                                           (q-join (q-d c4) (q-c c5)
-                                                   (q-b c7) (q-a c8))
-                                           (q-join (q-d c5) (q-c c6)
-                                                   (q-b c8) (q-a c9))))
-                                        (progn
-                                          (q-join
-                                           (successor (q-join c1 c2
-                                                              c4 c5)
-                                                      j)
-                                           (successor (q-join c2 c3
-                                                              c5 c6)
-                                                      j)
-                                           (successor (q-join c4 c5
-                                                              c7 c8)
-                                                      j)
-                                           (successor (q-join c5 c6
-                                                              c8 c9)
-                                                      j))))))))))))))
-             (gethash the-hash *successor-table*))))))
+      (declare (ignorable val))
+      (when (not found)
+        (let ((the-value
+                (cond
+                  ((= (q-n m) 0)
+                   (q-a m))
+                  ((= (q-k m) 2)
+                   (life-4x4 m))
+                  (t
+                   (multiple-value-bind (c1 c2 c3 c4 c5 c6 c7 c8 c9) (inner-successors m j)
+                     (if (< j (- (q-k m) 2) )
+                         (progn
+                           (q-join
+                            (q-join (q-d c1) (q-c c2)
+                                    (q-b c4) (q-a c5))
+                            (q-join (q-d c2) (q-c c3)
+                                    (q-b c5) (q-a c6))
+                                     
+                            (q-join (q-d c4) (q-c c5)
+                                    (q-b c7) (q-a c8))
+                            (q-join (q-d c5) (q-c c6)
+                                    (q-b c8) (q-a c9))))
+                         (progn
+                           (q-join
+                            (successor (q-join c1 c2
+                                               c4 c5)
+                                       j)
+                            (successor (q-join c2 c3
+                                               c5 c6)
+                                       j)
+                            (successor (q-join c4 c5
+                                               c7 c8)
+                                       j)
+                            (successor (q-join c5 c6
+                                               c8 c9)
+                                       j)))
+                         ))))))
+          (when (null the-value)
+            (format t "Warning: successor returning null for m: ~a j: ~a~%" m in-j))
+          (setf (gethash the-hash *successor-table*) the-value))))
+    (gethash the-hash *successor-table*)))
 
 
 
@@ -403,29 +423,24 @@ expansion of n to find the correct successors."
   (declare (ignorable node n))
   (when (= 0 n)
     (return-from advance node))
+  (let* ((bit-count (1+ (ceiling (log n 2))))
+         (new-node (loop
+                     :for new-node = (center node) :then (center new-node)
+                     :for k :below bit-count
+                     :finally (return new-node))))
+    (when (null new-node)
+      (format t "Warning: new-node is null!~%"))
+    (loop
+      :for bit = (logbitp k n)
+      :for k :from 0 :below bit-count
+      :for j = (- bit-count k 1)
+      :for next-node = new-node
+        :then
+        (if bit
+            (successor next-node j)
+            next-node)
 
-  (multiple-value-bind (bits new-node)
-      (loop
-        :for nn = n :then (ash nn -1)
-        :for new-node = node
-          :then (center node)
-        :while (> nn 0 )
-        :collecting (logand 1 nn)
-          :into bits
-        :finally (return (values bits new-node)))
-    (crop
-     (loop
-       :with len = (length bits)
-       :for k :from 0
-       :for j = (- len k 1)
-       :for bit :in (reverse bits)
-       :for node = new-node
-         :then (if (= bit 1)
-                   (successor node j)
-                   node)
-
-
-       :finally (return node)))))
+      :finally (return (crop next-node)))))
 
 (defun is-padded (node)
   (with-slots (a b c d) node
