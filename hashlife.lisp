@@ -16,14 +16,13 @@
 
 (in-package :cl-hashlife)
 
-(declaim (optimize (debug 3)))
-
 
 (defun qtnode-hash-func (val)
   (sxhash (q-hash val)))
 ;;(sb-ext:define-hash-table-test qtnode-hash qtnode-hash-func)
 
 (defmethod cl:print-object ((node qtnode) stream)
+  (declare (type stream stream))
   (with-slots (k n a b c d hash) node
     (format stream
             "(qtnode (k ~a) (size ~a) (population ~a) (hash ~a) (~a ~a ~a ~a))"
@@ -36,6 +35,113 @@
             (if c (q-n c) 0)
             (if d (q-n d) 0))))
 
+(defstruct (manual-memoizer (:conc-name mm-))
+  (hash-table (make-hash-table :test 'equal
+                               ;;#+sbcl :weakness #+sbcl :value
+                               ))
+  (hash-function (lambda (x) x))
+  (hits 0 :type fixnum)
+  (misses 0 :type fixnum)
+  (enabled nil :type (or t nil)))
+
+
+(defun mm-hash-table-size (mm)
+  (hash-table-count (mm-hash-table mm)))
+
+(defun mm-get (mm &rest params)
+  (with-slots (hash-table hash-function enabled hits misses) mm
+    (cond
+      (enabled
+       (multiple-value-bind (val foundp)
+           (gethash (apply hash-function params) hash-table nil)
+         (if foundp
+             (incf hits)
+             (incf misses))
+         (values val foundp)))
+
+      ((not enabled)
+       (values nil nil)))))
+
+(defun mm-calls (mm)
+  (with-slots (hits misses) mm
+    (+ hits misses)))
+
+(defun mm-reset (mm)
+  (with-slots (hash-table hits misses) mm
+    (clrhash hash-table)
+    (setf hits 0
+          misses 0)))
+
+(defun mm-enable (mm)
+  (with-slots (enabled) mm
+    (setf enabled t)))
+
+(defun mm-disable (mm)
+  (with-slots (enabled) mm
+    (setf enabled nil)))
+
+(defun mm-add (mm params value)
+  (with-slots (hash-table
+               hash-function
+               enabled)
+      mm
+    (cond
+      (enabled
+       (let ((hash-value (apply hash-function params)))
+         (setf (gethash
+                hash-value
+                hash-table)
+               value)))
+      ((not enabled)
+       value))))
+
+(defun mm-hash (mm &rest params)
+  (apply (mm-hash-function mm) params))
+
+(defun to-64-bit (num)
+  (logand num (- (ash 1 63) 1)))
+
+(defun compute-hash (a b c d)
+  (let ((val (to-64-bit (+ (q-k a)
+                           2
+                           (to-64-bit (* 5131830419411 (q-hash a)))
+                           (to-64-bit (* 3758991985019 (q-hash b)))
+                           (to-64-bit (* 8973110871315 (q-hash c)))
+                           (to-64-bit (* 4318490180473 (q-hash d)))))))
+    val))
+  ;; (declare (optimize (speed 3) (space 3) (safety 0) (debug 0)))
+  ;; (+ (q-k a)
+  ;;    2
+  ;;    (to-64-bit
+  ;;     (logxor
+  ;;      (to-64-bit
+  ;;       (*
+  ;;        (to-64-bit
+  ;;         (logxor
+  ;;          (to-64-bit
+  ;;           (*
+  ;;            (to-64-bit
+  ;;             (logxor
+  ;;              (to-64-bit
+  ;;               (* (q-hash a)
+  ;;                  5131830419411))
+  ;;              (q-hash b)))
+  ;;            3758991985019))
+  ;;          (q-hash c)))
+  ;;        8973110871315))
+  ;;      (* ;;4318490180473
+  ;;       1
+  ;;       (q-hash d))))))
+
+
+(defparameter *join-memo* (make-manual-memoizer :hash-function #'compute-hash :enabled t))
+
+(defparameter *zero-memo* (make-manual-memoizer :hash-function #'identity :enabled t))
+
+(defparameter *successor-memo* (make-manual-memoizer :hash-function (lambda (node j) (+
+                                                                                      (* 10000000 (q-hash node))
+                                                                                      j))
+                                                     :enabled t))
 (defparameter *on* (make-qtnode :k 0 :n 1 :hash 1)
   "Base level binary node 1")
 
@@ -44,50 +150,33 @@
 
 (defparameter *mask* (1- (ash 1 63)))
 
-(defun to-64-bit (num)
-  (logand num (1-  (ash 1 62))))
-
-(defun compute-hash (a b c d)
-  ;; (let ((val (logand (1- (ash 1 63))
-  ;;                    (+ (q-k a)
-  ;;                       2
-  ;;                       (* 5131830419411 (q-hash a))
-  ;;                       (* 3758991985019 (q-hash b))
-  ;;                       (* 8973110871315 (q-hash c))
-  ;;                       (* 4318490180473 (q-hash d))))))
-  ;;   val)
-  (declare (optimize (speed 3) (space 3) (safety 0) (debug 0)))
-  (+ (q-k a)
-     2
-     (to-64-bit
-      (logxor
-       (to-64-bit
-        (*
-         (to-64-bit
-          (logxor
-           (to-64-bit
-            (*
-             (to-64-bit
-              (logxor
-               (to-64-bit
-                (* (q-hash a)
-                   4318490180473))
-               (q-hash b)))
-             3758991985019))
-           (q-hash c)))
-         8973110871315))
-       (q-hash d)))))
-
-(defparameter *join-table* (make-hash-table :test 'eql))
-(defparameter *join-calls* nil)
 
 (defun join-table-stats ()
-    (loop
-      :for pt
-        :being :the hash-keys :of *join-table*
-          :using (hash-value node)
-      :when (or (> (q-n node) 2))
-        :collecting node))
+  ;; (let ((cache-hit-rate (if (and (not (zerop *join-cache-misses*))
+  ;;                                           (not  (zerop *join-cache-hits*)))
+  ;;                                      (/ *join-cache-hits*
+  ;;                                         (+ *join-cache-hits* *join-cache-misses*)
+  ;;                                         1.0)
+  ;;                                      0)))
+  ;;   (multiple-value-bind (g10 g20 g50 g100 g500 g1000)
+  ;;       (loop :for pt
+  ;;               :being :the hash-keys :of *join-table*
+  ;;                 :using (hash-value node)
+  ;;             :counting (> (q-n node) 10) :into g10
+  ;;             :counting (> (q-n node) 20) :into g20
+  ;;             :counting (> (q-n node) 50) :into g50
+  ;;             :counting (> (q-n node) 100) :into g100
+  ;;             :counting (> (q-n node) 500) :into g500
+  ;;             :counting (> (q-n node) 1000) :into g1000
+  ;;             :finally (return (values g10 g20 g50 g100 g500 g1000)))
+  ;;     (format t "Cache hit rate: ~a~%" cache-hit-rate)
+  ;;     (format t "Nodes >10 pop : ~a~%" g10)
+  ;;     (format t "Nodes >20 pop : ~a~%" g20)
+  ;;     (format t "Nodes >50 pop : ~a~%" g50)
+  ;;     (format t "Nodes >100 pop : ~a~%" g100)
+  ;;     (format t "Nodes >500 pop : ~a~%" g500)
+  ;;     (format t "Nodes >1000 pop : ~a~%" g1000)))
+  )
 
 (defun q-join (a b c d)
   "Combine four children at level `k-1` to a new node at level `k`.
@@ -95,70 +184,59 @@ If this is cached, return the cached node.
 Otherwise, create a new node, and add it to the cache."
   (declare (type qtnode a b c d))
 
-  ;; (let ((rval (make-qtnode :k (1+ (q-k a))
-  ;;                          :a a
-  ;;                          :b b
-  ;;                          :c c
-  ;;                          :d d
-  ;;                          :n (+ (q-n a)
-  ;;                                (q-n b)
-  ;;                                (q-n c)
-  ;;                                (q-n d))
-  ;;                          :hash (compute-hash a b c d))))
-  ;;   (setf (gethash (compute-hash a b c d) *join-table*) rval)
-  ;;   rval)
 
-  (let ((the-hash (compute-hash a b c d)))
-    (multiple-value-bind (val found) (gethash the-hash *join-table*)
-      (declare (ignorable val))
-      (when (not found)
-        (setf (gethash the-hash *join-table*)
-              (make-qtnode :k (1+ (q-k a))
-                           :a a
-                           :b b
-                           :c c
-                           :d d
-                           :n (+ (q-n a)
-                                 (q-n b)
-                                 (q-n c)
-                                 (q-n d))
-                           :hash the-hash))
-        )
-      (push (list the-hash a b c d) *join-calls*)
-      (gethash the-hash *join-table*)))
-  )
+  (multiple-value-bind (val found) (mm-get *join-memo* a b c d)
+    (cond
+      (found
+       val)
+      ((not found)
+       (mm-add *join-memo* (list a b c d)
+               (progn
+                 ;;(break)
+                 (make-qtnode :k (1+ (q-k a))
+                              :a a
+                              :b b
+                              :c c
+                              :d d
+                              :n (+ (q-n a)
+                                    (q-n b)
+                                    (q-n c)
+                                    (q-n d))
+                              :hash (compute-hash a b c d))))))))
 
-
-;;(fare-memoization:memoize 'get-zero)
-(defparameter *zero-table* (make-hash-table :test 'equal))
 (defun get-zero (k)
   "Return an empty node at level `k`."
   (declare (type integer k))
-  (multiple-value-bind (val found) (gethash k *zero-table*)
-    (cond (found
-           val)
-          (t
-           (setf
-            (gethash k *zero-table*)
-            (if (> k 0)
-                (let ((omk (- k 1)))
-                  (q-join (get-zero omk)
-                          (get-zero omk)
-                          (get-zero omk)
-                          (get-zero omk)))
-                *off*))
-           (gethash k *zero-table*)))))
 
-(defun center (m)
+  (multiple-value-bind (val found) (mm-get *zero-memo*  k)
+    (cond
+      (found
+       val)
+      ((not found)
+       (mm-add *zero-memo*
+               (list k)
+               (if (> k 0)
+                   (let ((omk (- k 1)))
+                     (q-join (get-zero omk)
+                             (get-zero omk)
+                             (get-zero omk)
+                             (get-zero omk)))
+                   *off*))))))
+
+(defun center (m &optional (times 1))
   "Return a node at level `k+1`, which is centered on the given quadtree node."
   (declare (type qtnode m))
   (let ((z (get-zero (q-k (q-a m)))))
-   (with-slots (a b c d) m
-      (q-join
-       (q-join z z z a)
-       (q-join z z b z)
-       (q-join z c z z)
-       (q-join d z z z)))))
+    (with-slots (a b c d) m
+
+      (let ((next (q-join
+                   (q-join z z z a)
+                   (q-join z z b z)
+                   (q-join z c z z)
+                   (q-join d z z z))))
+        (if (= times 1)
+            next
+            (center next (- times 1)))))))
 
 (defun life (a b c
              d e f
@@ -176,7 +254,7 @@ Returns *on* if should be on, *off* otherwise."
                       :summing (q-n node))))
     (declare (type integer outer))
     (if (or (= outer 3)
-            (= 2 outer(q-n e)))
+            (= 2 outer (q-n e)))
         *on*
         *off*)))
 
@@ -215,8 +293,32 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                           m.c.d  m.d.c  m.d.d))))))))
 
 
-
-(defparameter *successor-table* (make-hash-table :test 'equal))
+(defun successor-table-stats ()
+  ;; (let ((cache-hit-rate (if (and (not (zerop *successor-cache-misses*))
+  ;;                                (not  (zerop *successor-cache-hits*)))
+  ;;                           (/ *successor-cache-hits*
+  ;;                              (+ *successor-cache-hits* *successor-cache-misses*)
+  ;;                              1.0)
+  ;;                           0)))
+  ;;   (multiple-value-bind (g10 g20 g50 g100 g500 g1000)
+  ;;       (loop :for pt
+  ;;               :being :the hash-keys :of *successor-table*
+  ;;                 :using (hash-value node)
+  ;;             :counting (> (q-n node) 10) :into g10
+  ;;             :counting (> (q-n node) 20) :into g20
+  ;;             :counting (> (q-n node) 50) :into g50
+  ;;             :counting (> (q-n node) 100) :into g100
+  ;;             :counting (> (q-n node) 500) :into g500
+  ;;             :counting (> (q-n node) 1000) :into g1000
+  ;;             :finally (return (values g10 g20 g50 g100 g500 g1000)))
+  ;;     (format t "Cache hit rate: ~a~%" cache-hit-rate)
+  ;;     (format t "Nodes >10 pop : ~a~%" g10)
+  ;;     (format t "Nodes >20 pop : ~a~%" g20)
+  ;;     (format t "Nodes >50 pop : ~a~%" g50)
+  ;;     (format t "Nodes >100 pop : ~a~%" g100)
+  ;;     (format t "Nodes >500 pop : ~a~%" g500)
+  ;;     (format t "Nodes >1000 pop : ~a~%" g1000)))
+  )
 
 (defun inner-successors (m j)
   (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) m
@@ -226,15 +328,14 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
           (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) m.d
             (let (
                   ;; Top Row
-                  (c1 (successor (q-join m.a.a m.a.b
-                                         m.a.c m.a.d)
+                  (c1 (successor m.a
                                  j))
 
                   (c2 (successor (q-join m.a.b  m.b.a
+
                                          m.a.d  m.b.c)
                                  j))
-                  (c3 (successor (q-join m.b.a m.b.b
-                                         m.b.c m.b.c)
+                  (c3 (successor m.b
                                  j))
 
                   ;; Middle Row
@@ -249,72 +350,71 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                                  j))
 
                   ;; Bottom row
-                  (c7 (successor (q-join m.c.a m.c.b
-                                         m.c.c m.c.d)
+                  (c7 (successor m.c
                                  j))
                   (c8 (successor (q-join m.c.b  m.d.a
                                          m.c.d  m.d.c)
                                  j))
-                  (c9 (successor (q-join m.d.a m.d.b
-                                         m.d.c m.d.d)
+                  (c9 (successor m.d
                                  j)))
-              (values c1 c2 c3 c4 c5 c6 c7 c8 c9))))))))
+              (values c1 c2 c3
+                      c4 c5 c6
+                      c7 c8 c9))))))))
 
-(defun successor (m &optional in-j)
+(defun successor (m &optional (in-j (- (q-k m) 2)))
   "Return the 2**k-1 x 2**k-1 successor, 2**j generations in the future,
 where j<= k-2, caching the result."
   (declare (type qtnode m)
            (type (or null integer)  in-j))
-  (let* ((j (if (null in-j)
-                (- (q-k m) 2)
-                (min in-j (- (q-k m) 2))))
-         (the-hash (cons (q-hash m) j)))
+  (let* ((j (min in-j (- (q-k m) 2))))
     (when (< j 0)
       (error "j ~a < 0" j))
-    (multiple-value-bind (val found) (gethash the-hash *successor-table*)
-      (declare (ignorable val))
-      (when (not found)
-        (let ((the-value
-                (cond
-                  ((= (q-n m) 0)
-                   (q-a m))
-                  ((= (q-k m) 2)
-                   (life-4x4 m))
-                  (t
-                   (multiple-value-bind (c1 c2 c3 c4 c5 c6 c7 c8 c9) (inner-successors m j)
-                     (if (< j (- (q-k m) 2) )
-                         (progn
-                           (q-join
-                            (q-join (q-d c1) (q-c c2)
-                                    (q-b c4) (q-a c5))
-                            (q-join (q-d c2) (q-c c3)
-                                    (q-b c5) (q-a c6))
-                                     
-                            (q-join (q-d c4) (q-c c5)
-                                    (q-b c7) (q-a c8))
-                            (q-join (q-d c5) (q-c c6)
-                                    (q-b c8) (q-a c9))))
-                         (progn
-                           (q-join
-                            (successor (q-join c1 c2
-                                               c4 c5)
-                                       j)
-                            (successor (q-join c2 c3
-                                               c5 c6)
-                                       j)
-                            (successor (q-join c4 c5
-                                               c7 c8)
-                                       j)
-                            (successor (q-join c5 c6
-                                               c8 c9)
-                                       j)))
-                         ))))))
-          (when (null the-value)
-            (format t "Warning: successor returning null for m: ~a j: ~a~%" m in-j))
-          (setf (gethash the-hash *successor-table*) the-value))))
-    (gethash the-hash *successor-table*)))
+    (flet ((inner-successor ()
+             (cond
+               ((zerop (q-n m))
+                (q-a m))
+               ((= 2 (q-k m))
+                (life-4x4 m))
+               (t
+                (multiple-value-bind (c1 c2 c3
+                                      c4 c5 c6
+                                      c7 c8 c9)
+                    (inner-successors m j)
+                  ;;(break)
+                  (if (< j (- (q-k m) 2) )
+                      (q-join
+                       (q-join (q-d c1) (q-c c2)
+                               (q-b c4) (q-a c5))
+                       (q-join (q-d c2) (q-c c3)
+                               (q-b c5) (q-a c6))
 
+                       (q-join (q-d c4) (q-c c5)
+                               (q-b c7) (q-a c8))
+                       (q-join (q-d c5) (q-c c6)
+                               (q-b c8) (q-a c9)))
 
+                      (q-join
+                       (successor (q-join c1 c2
+                                          c4 c5)
+                                  j)
+                       (successor (q-join c2 c3
+                                          c5 c6)
+                                  j)
+                       (successor (q-join c4 c5
+                                          c7 c8)
+                                  j)
+                       (successor (q-join c5 c6
+                                          c8 c9)
+                                  j))))))))
+      (multiple-value-bind (val found) (mm-get *successor-memo* m j)
+        (cond
+          (found
+           val)
+
+          ((not found)
+           (mm-add *successor-memo*
+                   (list m in-j)
+                   (inner-successor))))))))
 
 (defun construct (pts)
   "Turn a list of x y coordinates into a quadtree and return the top level node."
@@ -430,17 +530,25 @@ expansion of n to find the correct successors."
                      :finally (return new-node))))
     (when (null new-node)
       (format t "Warning: new-node is null!~%"))
+
+    ;; (loop :for count :below n
+    ;;       :for nod = (successor new-node )
+    ;;         :then (successor nod 1)
+    ;;       :finally (return nod))
     (loop
+      :for k :from 0 :below (1+ bit-count)
       :for bit = (logbitp k n)
-      :for k :from 0 :below bit-count
       :for j = (- bit-count k 1)
-      :for next-node = new-node
+      :for next-node = (if bit
+                           (successor new-node j)
+                           new-node)
         :then
         (if bit
             (successor next-node j)
             next-node)
 
-      :finally (return (crop next-node)))))
+      :finally (return next-node))
+    ))
 
 (defun is-padded (node)
   (with-slots (a b c d) node
@@ -458,8 +566,8 @@ expansion of n to find the correct successors."
         (q-n (q-a (q-a d)))))))
 
 (defun pad (node)
-  (if (and (< 3 (q-k node))
-          (not (is-padded node)))
+  (if (or (<= (q-k node) 3)
+          (not  (is-padded node)))
       (pad (center node))
       node))
 
@@ -503,7 +611,8 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
           (pt (ash x reduction)
               (ash y reduction)
               (/ (q-n node)
-                 (* size size))))))
+                 (* size size)
+                 1.0)))))
 
       ;; Otherwise try expanding the children
       (t
@@ -541,3 +650,260 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
                                :level level)
                        #'pt-<)
                 #'pt-<))))))
+
+(defun align (pts)
+  (let* ((min-pt (loop
+                   :for pt :in pts
+                   :minimizing (pt-x pt) :into min-x
+                   :minimizing (pt-y pt) :into min-y
+                   :finally (return (pt min-x min-y *on*)))))
+    (sort (mapcar
+           (lambda (pt)
+             (hl::pt (- (pt-x pt) (pt-x min-pt))
+                 (- (pt-y pt) (pt-y min-pt))
+                 1))
+           pts)
+          #'pt-<)))
+
+(defun same-pattern (pts expanded)
+  (every #'hl::pt-= (align pts) (align expanded)))
+
+(defun show-side-by-side (pat-name n &optional (stream t))
+  (declare (type fixnum n))
+  (let* ((pat (read-game-file pat-name))
+         (node (construct pat)))
+    (loop
+      :for i fixnum :below n
+      :for this-pat = pat
+        :then (hl::iterate-baseline-life this-pat)
+      :for advanced = (hl::advance node i)
+      :do
+         (format stream "baseline~%===========================================================================================~%")
+         (show-life this-pat stream)
+         (format stream "~%hashlife~%===========================================================================================~%")
+         (show-life advanced stream)
+         (format stream "====================================================================================================~%"))))
+
+(defun crop-points (pts lower-left upper-right)
+  (loop :for pt :in pts
+        :when (pt-in-box pt lower-left upper-right)
+          :collect pt))
+
+(defun animate-life (output-directory
+                     filename
+                     pts-or-node
+                     n
+                     &key
+                       (level 0)
+                       (lower-left nil)
+                       (upper-right nil)
+                       (width 2000)
+                       (height 2000))
+  (ensure-directories-exist output-directory)
+  (loop
+    :for i :below n
+    :for pts = pts-or-node
+      :then (etypecase pts
+              (list (baseline-advance pts 1))
+              (qtnode (advance pts 1)))
+
+    :for file-name = (format nil "~a/~a~8,'0d.svg" output-directory filename i)
+    :do
+       (to-svg file-name
+               pts
+               :level level
+               :lower-left lower-left
+               :upper-right upper-right
+               :width width
+               :height height)))
+
+(defun animate-hashlife-qt (output-directory
+                            filename
+                            node
+                            n
+                            &key
+                              (depth 8)
+                              (width 2000))
+  (ensure-directories-exist output-directory)
+  (loop
+    :for i :below n
+    :for pts = node
+      :then (advance pts 1)
+
+    :for file-name = (format nil "~a/~a~8,'0d.svg" output-directory filename i)
+    :do
+       (qt-to-svg file-name
+                  pts
+                  :depth depth
+                  :width width)))
+
+(defun animate-hashlife-successor (output-directory
+                                   filename
+                                   node
+                                   n
+                                   &key
+                                     (depth 8)
+                                     (width 2000))
+  (ensure-directories-exist output-directory)
+  (loop
+    :for pts = node
+      :then (successor node i)
+    :for i :from 0 :below n
+    :for file-name = (format nil "~a/~a~8,'0d.svg" output-directory filename i)
+    :do
+       (qt-to-svg file-name
+                  pts
+                  :depth depth
+                  :width width)))
+
+;; (defun animate-hashlife (output-directory svg-base-name dot-name node iteration-count
+;;                          &kjey
+;;                          (depth 0)
+;;                          (width 2000)
+;;                          (stroke-width 1))
+;;   (ensure-directories-exist output-directory)
+;;   (with-output-to-file (dotf (format nil
+;;                                      "~a/svg-base-name.dot"
+;;                                      :if-exists :supersede))
+;;     (format dotf "digraph {~%")
+;;     (loop
+;;       :for i :below iteration-count
+;;       :for the-node = node
+;;         :then (advance the-node 1)
+;;       :for svg-name = (format nil "~a/~a~8,'0d.svg" output-directory filename i)
+;;       :do
+;;          (qt-to-svg svg-base-name)
+;;          (format dotf "node~a -> node~a;" )
+;;       )))
+
+(defun qt-to-svg (file-name node &key
+                                   (depth 0)
+                                   (width 2000)
+                                   (stroke-width 1))
+
+  (with-output-to-file (outf file-name :if-exists :supersede)
+    (svg:with-svg (outf width width :default-stroke-width stroke-width
+                                    :default-stroke-color (vec4 0.1 0.1 0.1 0.6)
+                                    :view-min (vec2 0 0)
+                                    :view-width (vec2 width width))
+      (labels ((draw-node (node current-depth min-x max-x min-y max-y)
+                 (with-slots (k n a b c d) node
+                   (let* ((node-width (- max-x min-x))
+                          (node-height (- max-y min-y))
+                          (mid-x (+ min-x
+                                    (/ node-width
+                                       2)))
+                          (mid-y (+ min-y
+                                    (/ node-height
+                                       2)))
+                          (size (expt 2 (q-k node)))
+                          (gray (- 1 (/ n (* size size) 1.0))))
+                     (when (not (zerop n))
+                       (svg:rectangle outf
+                                      (vec2 min-x min-y)
+                                      (vec2 node-width node-height)
+                                      :fill-color (vec4 gray gray gray (if (not (zerop n)) 1 0))))
+                     (when (and (> (q-k node)
+                                   0)
+                                (< current-depth depth))
+                       (draw-node a
+                                  (1+ current-depth)
+                                  min-x
+                                  mid-x
+                                  min-y
+                                  mid-y
+                                  )
+                       (draw-node b
+                                  (1+ current-depth)
+                                  mid-x
+                                  max-x
+                                  min-y
+                                  mid-y
+                                  )
+                       (draw-node c
+                                  (1+ current-depth)
+                                  min-x
+                                  mid-x
+                                  mid-y
+                                  max-y
+                                  )
+                       (draw-node d
+                                  (1+ current-depth)
+                                  mid-x
+                                  max-x
+                                  mid-y
+                                  max-y))))))
+        (draw-node node 0 0 width 0 width)))))
+
+
+(defun to-svg (file-name pts-or-node &key
+                                       (level 0)
+                                       (lower-left nil)
+                                       (upper-right nil)
+                                       (width 2000)
+                                       (height 2000)
+                                       (stroke-width 1))
+  (let ((remaining-pts (sort (etypecase pts-or-node
+                               (list
+                                (if (and lower-left upper-right)
+                                    (crop-points pts-or-node lower-left upper-right)
+                                    pts-or-node))
+                               (qtnode
+                                (if (and lower-left upper-right)
+                                    (expand pts-or-node
+                                            :min-x (pt-x lower-left)
+                                            :min-y (pt-y lower-left)
+                                            :max-x (pt-x upper-right)
+                                            :max-y (pt-y upper-right)
+                                            :level level)
+                                    (expand pts-or-node
+                                            :level level))))
+                             #'pt-<)))
+
+    (with-output-to-file (outf file-name :if-exists :supersede)
+
+      (svg:with-svg (outf width height :default-stroke-width stroke-width
+                                       :view-min (vec2 0 0)
+                                       :view-width (vec2 width height))
+        (multiple-value-bind (min-x min-y max-x max-y)
+            (if (and lower-left upper-right)
+                (values (pt-x lower-left) (pt-y lower-left)
+                        (pt-x upper-right) (pt-y upper-right))
+                (loop :for pt :in remaining-pts
+                      :minimizing (pt-x pt) :into min-x
+                      :minimizing (pt-y pt) :into min-y
+                      :maximizing (pt-x pt) :into max-x
+                      :maximizing (pt-y pt) :into max-y
+                      :finally (return (values min-x min-y max-x max-y))))
+          (let* ((max-cells (max  (1+ (- max-x min-x))
+                                  (1+ (- max-y min-y))))
+                 (cell-width (/ width max-cells))
+                 (cell-height (/ height max-cells))
+                 (cell-size (vec2 cell-width cell-height)))
+            (flet ((mp (x y) (vec2 (* cell-width
+                                      (- (ash x 0) min-x))
+                                   (* cell-height
+                                      (- (ash y 0) min-y)))))
+              (loop
+                :for y :from min-y :to (1+ max-y) :do
+                  (svg:line outf
+                            (mp min-x y)
+                            (mp (1+ max-x) y)
+                            :stroke-width stroke-width))
+              (loop
+                :for x :from min-x :to (1+ max-x) :do
+                  (svg:line outf
+                            (mp x min-y)
+                            (mp x (1+ max-y))
+                            :stroke-width stroke-width))
+              (loop
+                :for pt :in remaining-pts
+                :do
+                   (with-slots (gray x y) pt
+                     (svg:rectangle outf
+                                    (mp x y)
+                                    cell-size
+                                    :fill-color (vec4 (- 1 gray)
+                                                      (- 1 gray)
+                                                      (- 1 gray)
+                                                      1.0)))))))))))

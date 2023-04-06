@@ -19,12 +19,21 @@
 
   (:nicknames #:hl)
 
-  (:use #:cl #:alexandria)
+  (:use #:cl #:alexandria #:3d-vectors)
   (:export
-
+   #:main
            ;; Pretty print 2D grid to stream
            ;; Takes (x . y) or ((x . y) . gray-level)
            #:show-life-game
+
+           #:to-svg
+           #:animate-life
+           #:animate-hashlife-qt
+           #:animate-hashlife-successor
+           #:qt-to-svg
+           #:make-life
+           #:make-hashlife
+           #:baseline-advance
 
            ;; Look for game file in game-files directory
            ;; of cl-hashlife package directory and guess
@@ -47,13 +56,15 @@
            ;; O(n) life using lists of (x . y) coordinates
            #:iterate-baseline-life
 
-           ;; Iterate a file or point list a number of times
-           ;; Takes iterator and printer functions as key
-           ;; parameters.
-           #:iterate-game-of-life
+           #:pt
 
            ;; Hashlife functions translated from this Python:
            ;; https://github.com/johnhw/hashlife
+           #:show-life
+           #:show-side-by-side
+           #:align
+           #:same-pattern
+           #:baseline
            #:get-address
            #:a
            #:b
@@ -87,6 +98,22 @@
            #:q-c
            #:q-d
 
-           #:join-table-stats
-           #:successor-table-stats
+           #:*join-memo*
+           #:*successor-memo*
+           #:*zero-memo*
+
+           #:make-manual-memoizer
+           #:mm-enabled
+           #:mm-calls
+           #:mm-reset
+           #:mm-enable
+           #:mm-disable
+           #:mm-get
+           #:mm-add
+           #:mm-hash
+           #:mm-hits
+           #:mm-misses
+           #:mm-hash-table-size
+           #:mm-hash-function
+
            ))

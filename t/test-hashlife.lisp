@@ -23,6 +23,8 @@
 
 (in-package :cl-hashlife.test.hashlife)
 
+(declaim (optimize (debug 3) (speed 3) (space 3) (safety 3)))
+
 (def-suite :cl-hashlife-hashlife)
 (in-suite :cl-hashlife-hashlife)
 
@@ -50,8 +52,12 @@
            four-peat)))
 
 (test bootstrap
-  (clrhash hl::*join-table*)
-  (clrhash hl::*successor-table*)
+  (hl::mm-reset  hl::*join-memo*)
+  (hl::mm-reset hl::*successor-memo*)
+  (is (= 0
+         (hl::mm-hash-table-size hl::*join-memo*)))
+  (is (= 0
+         (hl::mm-hash-table-size hl::*successor-memo*)))
   (loop
       :for i :below 2 :do
         (let* ((boot-2x2 (product-tree (list hl::*on* hl::*off*)))
@@ -59,12 +65,12 @@
           (loop
             :for p :in boot-4x4
             :do
-               (hl:successor p 1))
+               (hl::successor p 1))
 
           (is (= (+ 16 65536)
-                 (hash-table-count hl::*join-table*)))
+                 (hl::mm-hash-table-size hl::*join-memo*)))
           (is (= 65536
-                 (hash-table-count hl::*successor-table*)))
+                 (hl::mm-hash-table-size hl::*successor-memo*)))
           )))
 
 (defun test-pattern ()
@@ -86,7 +92,7 @@
 
 (test ffwd-large
   (let ((node (hl::construct (hl::read-game-file "BREEDER.LIF"))))
-    (validate-tree (hl::ffwd node 64))))
+    (is (validate-tree (hl::ffwd node 64)))))
 
 (test get-zero
   (loop :for i :below 32
@@ -94,23 +100,6 @@
         :do
            (is (= i (q-k z)))
            (is (zerop (q-n z)))))
-
-(defun align (pts)
-  (let* ((min-pt (loop
-                   :for pt :in pts
-                   :minimizing (hl::pt-x pt) :into min-x
-                   :minimizing (hl::pt-y pt) :into min-y
-                   :finally (return (hl::pt min-x min-y *on*)))))
-    (sort (mapcar
-           (lambda (pt)
-             (hl::pt (- (hl::pt-x pt) (hl::pt-x min-pt))
-                 (- (hl::pt-y pt) (hl::pt-y min-pt))
-                 1))
-           pts)
-          #'hl::pt-<)))
-
-(defun same-pattern (pts expanded)
-  (every #'hl::pt-= (align pts) (align expanded)))
 
 (defun verify-baseline (pat n)
   (let ((node (hl::construct pat)))
@@ -144,8 +133,9 @@
 
 (test all-patterns
   (loop :for fname :in (uiop:directory-files "~/src/hashlife/lifep/" "*.LIF")
-        :for i :below 4
+        ;; :for i :below 4
         :do
+           (format t " Verifying ~a~%" fname)
            (verify-baseline (hl::read-game-file fname) 64)))
 
 (test clip
@@ -156,7 +146,7 @@
     (verify-clipped node 40 40 1600 1600)
     (verify-clipped node 40 40 160 160)))
 
-(test baseline
+(test vbaseline
   (verify-baseline (test-pattern) 64))
 
 (test construct

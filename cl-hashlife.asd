@@ -20,9 +20,10 @@
   :license  "ISC"
   :version "0.0.1"
   :serial t
-  :depends-on (#:j-utils #:alexandria #:str)
+  :depends-on (#:command-line-arguments #:uiop #:alexandria #:str #:3d-vectors #:svg)
   :components ((:file "package")
                (:file "utilities")
-               (:file "hashlife"))
+               (:file "hashlife")
+               (:file "main"))
 
   :in-order-to ((test-op (test-op cl-hashlife.test))))

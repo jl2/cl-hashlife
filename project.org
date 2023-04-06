@@ -9,8 +9,17 @@ ISC
 
 Copyright (c) 2023 Jeremiah LaRocco <jeremiah_larocco@fastmail.com>
 
+#+begin_src python
+import os
+os.chdir("/home/jeremiah/src/hashlife/")
+import hashlife
 
+import lifeparsers
+square = hashlife.construct(lifeparsers.autoguess_life_file("/home/jeremiah/src/lisp/cl-hashlife/game-files/square.life")[0])
+testpat = hashlife.construct(lifeparsers.autoguess_life_file("/home/jeremiah/src/lisp/cl-hashlife/game-files/testpat1.cells")[0])
+#+end_src
 
+#+RESULTS:
 
 * Plan
 ** TODO Fix `construct`

@@ -31,7 +31,7 @@
   (c nil :type maybe-node)
   (d nil :type maybe-node)
   (n nil :type integer)
-  (hash nil :type fixnum))
+  (hash nil :type integer))
 
 (defun get-address (node address)
   (loop
@@ -63,6 +63,13 @@
       (if (= (pt-y a) (pt-y b))
           (< (pt-x a) (pt-x b))
           nil)))
+
+(defun pt-in-box (pt lower upper)
+  (declare (type life-point pt lower upper))
+  (and (<  (pt-x pt) (pt-x upper))
+       (<  (pt-y pt) (pt-y upper))
+       (> (pt-x pt) (pt-x lower))
+       (> (pt-y pt) (pt-y lower))))
 
 (defun pt-= (a b)
   (declare (type life-point a b))
@@ -388,6 +395,11 @@
     (assoc-value readers
                  (string-downcase (pathname-type path))
                  :test #'string= )))
+(defun make-life (name-or-path)
+  (read-game-file name-or-path))
+
+(defun make-hashlife (name-or-path)
+  (hl:construct (read-game-file name-or-path)))
 
 (defun read-game-file (file-name-or-path)
   (let ((path (find-game-file file-name-or-path)))
@@ -409,6 +421,14 @@
                                  :external-format :utf8)
            (write-cells-stream stream pts comment)))))
 
+
+(defun show-life (node &optional (stream t) (level 0))
+  (etypecase node
+    (string (show-life-game stream (read-game-file node) level))
+    (list (show-life-game stream node level))
+    (qtnode
+     (show-life-game stream (expand node :level level) level)))
+  node)
 
 (defun show-life-game (stream pts &optional (level 0))
   (flet ((normalize (x)
@@ -443,17 +463,25 @@
                                   (format stream "░░")))))
                        (format stream "  ")))
             (format stream "~%")))
+      (format stream ".~%")
       (values cnt))))
 
-(defparameter *baseline-temp-table* (make-hash-table :test 'equal :size 100)
+(defparameter *baseline-temp-table* (make-hash-table :test 'equalp :size 100)
   "Avoid excessive hash table allocation in baseline-life.")
+
+(defun baseline (ipts times)
+   (loop 
+         :for pts = ipts :then 
+                        (iterate-baseline-life pts)
+         :for i :below times
+         :finally (return pts)))
 
 (defun iterate-baseline-life (pts)
   "The baseline implementation of the Game of Life.
 Takes a list of (x, y) cells and returns a new set of cells in
 the next generation."
 
-  (let ((counter (make-hash-table :test 'equal :size 100)))
+  (let ((counter (make-hash-table :test 'equalp :size 100)))
 
     ;; Count neighbors
     (loop
@@ -466,7 +494,7 @@ the next generation."
                 :for b :in '(-1 0 1)
                 :do
                    (incf (gethash (pt (+ (pt-x pt) a)
-                                        (+ (pt-y pt) b))
+                                      (+ (pt-y pt) b))
                                   counter
                                   0)))))
     (loop
@@ -479,22 +507,9 @@ the next generation."
         :collecting pt)))
 
 
-(defun iterate-game-of-life (file-name-or-game-data
-                             times
-                             &key
-                               (iterator #'hl:iterate-baseline-life)
-                               (printer (lambda (x)
-                                          (show-life-game *standard-output* x)
-                                          (format *standard-output*
-                                                  "~a~%"
-                                                  (make-string 120 :initial-element #\=)))))
+(defun baseline-advance (pts
+                         times)
   (loop
-    :with initial-data = (etypecase file-name-or-game-data
-                           (string
-                            (read-game-file file-name-or-game-data))
-                           (list file-name-or-game-data))
-    :for game = initial-data :then (funcall iterator game)
-    :for i :below (1+ times)
-    :when printer :do
-      (funcall printer game)
+    :for game = pts :then (iterate-baseline-life game)
+    :for i :below times
     :finally (return game)))
