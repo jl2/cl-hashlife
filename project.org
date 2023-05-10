@@ -3,6 +3,46 @@
 ** About
 A translation of Hashlife python code from [[https://johnhw.github.io/hashlife/index.md.html][this article]] to Common Lisp.  Also includes some utility functions to read and write different Life file formats, and a "baseline" Game of Life algorithm.
 
+** Examples
+#+begin_src lisp
+  (ql:quickload :cl-hashlife)
+  ;; Compare 10 iterations of Hashlife and the naive life algorithm.
+  ;; This was primarily useful for debugging the hashlife algorithm.
+  (hl:show-side-by-side "glider.rle" 10)
+#+end_src
+#+begin_src lisp
+   (ql:quickload :cl-hashlife)
+
+  ;; Use GraphViz to generate a visualization of the successor algorithm for (ht:testpat2)
+  ;; and save the results to "/home/jeremiah/images/hashlife/testpat/successor/testpat.svg"
+  (hl:show-successor
+   (hl:make-viz-context "/home/jeremiah/images/hashlife/testpat/successor/"
+                        :view-width (3d-vectors:vec2 200 200))
+   "testpat" (hl:center (hl:testpat2) 2) 1)
+#+end_src
+
+#+begin_src lisp
+       (ql:quickload :cl-hashlife)
+
+      ;; Use GraphViz to generate a visualization of the join algorithm
+      ;; and save the results to "/home/jeremiah/images/hashlife/jointestpat.svg"
+    (hl:show-join
+     (hl:make-viz-context "/home/jeremiah/images/hashlife/"
+                          :view-width (3d-vectors:vec2 1200 1200))
+     "jointestpat"
+     (hl:testpat2)
+     (hl:advance (hl:testpat2) 1)
+     (hl:advance (hl:testpat2) 2)
+     (hl:advance (hl:testpat2) 3))
+
+#+end_src
+
+#+RESULTS:
+| qtnode | (k 4) | (size 16) | (population 50) | (hash 8628458397510184356) | (18 14 14 4) |
+
+** Visualizing 
+
+
 ** License
 ISC
 

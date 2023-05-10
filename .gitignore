@@ -5,3 +5,5 @@
 *.cls
 *.abcl-tmp
 manifest.txt
+hashlife
+.gdb_history

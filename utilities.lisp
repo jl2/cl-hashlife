@@ -25,7 +25,7 @@
 (deftype maybe-node () '(or null qtnode))
 
 (defstruct (qtnode (:conc-name q-) )
-  (k 0 :type integer )
+  (k 1 :type integer)
   (a nil :type maybe-node)
   (b nil :type maybe-node)
   (c nil :type maybe-node)
@@ -382,7 +382,8 @@
            :for path :in *game-file-dirs*
            :do
               (when-let (the-file (probe-file (merge-pathnames fname path)))
-                (return-from find-game-file (merge-pathnames fname path))))))
+                (return-from find-game-file (merge-pathnames fname path)))
+           :finally (error "Could not find ~a" fname))))
     (pathname
      (probe-file fname))))
 
@@ -408,60 +409,74 @@
 
 
 (defun write-game-file (pts file-name &optional (comment "Written by cl-hashlife"))
-  (cond ((str:ends-with? ".life" file-name)
-         (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
-                                 :direction :output
-                                 :if-exists :supersede
-                                 :external-format :utf8)
-           (write-life-1.06-stream stream pts comment)))
-        ((str:ends-with? ".cells" file-name)
-         (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
-                                 :direction :output
-                                 :if-exists :supersede
-                                 :external-format :utf8)
-           (write-cells-stream stream pts comment)))))
+  (cond
+    ((str:ends-with? ".life" file-name)
+     (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
+                             :direction :output
+                             :if-exists :supersede
+                             :external-format :utf8)
+       (write-life-1.06-stream stream pts comment)))
+    ((str:ends-with? ".cells" file-name)
+     (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
+                             :direction :output
+                             :if-exists :supersede
+                             :external-format :utf8)
+       (write-cells-stream stream pts comment)))))
 
+(defgeneric show-life (node &optional stream level)
+  (:documentation "Pretty print a life game to stream."))
 
-(defun show-life (node &optional (stream t) (level 0))
-  (etypecase node
-    (string (show-life-game stream (read-game-file node) level))
-    (list (show-life-game stream node level))
-    (qtnode
-     (show-life-game stream (expand node :level level) level)))
-  node)
+(defmethod show-life ((node qtnode)
+                      &optional (stream t) (level 0))
+  (values node
+          (show-life-list stream (expand node :level level) level)))
 
-(defun show-life-game (stream pts &optional (level 0))
+(defmethod show-life ((node string)
+                      &optional (stream t) (level 0))
+  (values node
+          (show-life-list stream (read-game-file node) level)))
+
+(defmethod show-life ((node list)
+                      &optional (stream t) (level 0))
+  (values node
+          (show-life-list stream node level)))
+
+(defun show-life-list (stream pts
+                       &optional (level 0))
   (flet ((normalize (x)
-           (ash x level))
-         (denormalize (x)
-           (ash x (- level))))
+           (ash x level)))
     (let ((cnt 0)
           (remaining-pts (sort pts
                                #'pt-<)))
-      (multiple-value-bind (min-x min-y max-x max-y) (loop :for pt :in remaining-pts
-                                                           :minimizing (pt-x pt) :into min-x
-                                                           :minimizing (pt-y pt) :into min-y
-                                                           :maximizing (pt-x pt) :into max-x
-                                                           :maximizing (pt-y pt) :into max-y
-                                                           :finally (return (values min-x min-y max-x max-y)))
+      (multiple-value-bind (min-x min-y max-x max-y)
+          (loop :for pt :in remaining-pts
+                :minimizing (pt-x pt) :into min-x
+                :minimizing (pt-y pt) :into min-y
+                :maximizing (pt-x pt) :into max-x
+                :maximizing (pt-y pt) :into max-y
+                :finally (return (values min-x min-y max-x max-y)))
         (loop
-          :for y :from (normalize min-y) :to (normalize max-y) :do
-            (loop :for x :from (normalize min-x) :to (normalize max-x)
-                  :for elem = (pt (denormalize x) (denormalize y))
-                  :do
-                     (if-let ((it (find elem remaining-pts :test #'pt-= )))
-                       (progn
-                         ;;(declare (type life-point it))
-                         (setf remaining-pts (remove elem remaining-pts :test #'pt-=))
-                         (incf cnt)
-                         (with-slots (gray) it
-                           (cond ((> gray 0.7)
-                                  (format stream "██"))
-                                 ((> gray 0.5)
-                                  (format stream "▒▒"))
-                                 ((> gray 0.2)
-                                  (format stream "░░")))))
-                       (format stream "  ")))
+          :for y :from (normalize min-y) :to (normalize max-y)
+          :for real-y :from min-y :to max-y
+          :do
+            (loop
+              :for x :from (normalize min-x) :to (normalize max-x)
+              :for real-x :from min-x :to max-x
+              :for elem = (pt real-x real-y)
+              :do
+                 (if-let ((it (find elem remaining-pts :test #'pt-= )))
+                   (progn
+                     ;;(declare (type life-point it))
+                     (setf remaining-pts (remove elem remaining-pts :test #'pt-=))
+                     (incf cnt)
+                     (with-slots (gray) it
+                       (cond ((> gray 0.7)
+                              (format stream "██"))
+                             ((> gray 0.5)
+                              (format stream "▒▒"))
+                             ((> gray 0.2)
+                              (format stream "░░")))))
+                   (format stream "  ")))
             (format stream "~%")))
       (format stream ".~%")
       (values cnt))))

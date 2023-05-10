@@ -22,98 +22,107 @@
   (:use #:cl #:alexandria #:3d-vectors)
   (:export
    #:main
-           ;; Pretty print 2D grid to stream
-           ;; Takes (x . y) or ((x . y) . gray-level)
-           #:show-life-game
 
-           #:to-svg
-           #:animate-life
-           #:animate-hashlife-qt
-           #:animate-hashlife-successor
-           #:qt-to-svg
-           #:make-life
-           #:make-hashlife
-           #:baseline-advance
 
-           ;; Look for game file in game-files directory
-           ;; of cl-hashlife package directory and guess
-           ;; file type by extension
-           #:read-game-file
-           #:write-game-file
+   #:make-context
+   #:to-svg
+   #:qt-to-svg
+   #:animate-life
+   #:animate-hashlife-qt
+   #:show-hashlife-successors
+   #:show-successor
+   #:show-advance
+   
+   #:make-viz-context
+   #:show-join
+   #:show-inner-successors
+   
+   
+   #:make-life
+   #:make-hashlife
+   #:baseline-advance
 
-           ;; No write support yet for these two
-           #:read-life-1.05-stream
-           #:read-rle-stream
+   ;; Look for game file in game-files directory
+   ;; of cl-hashlife package directory and guess
+   ;; file type by extension
+   #:read-game-file
+   #:write-game-file
 
-           ;; Read/write .life 1.06
-           #:read-life-1.06-stream
-           #:write-life-1.06-stream
+   ;; No write support yet for these two
+   #:read-life-1.05-stream
+   #:read-rle-stream
 
-           ;; Read/write .cells
-           #:read-cells-stream
-           #:write-cells-stream
+   ;; Read/write .life 1.06
+   #:read-life-1.06-stream
+   #:write-life-1.06-stream
 
-           ;; O(n) life using lists of (x . y) coordinates
-           #:iterate-baseline-life
+   ;; Read/write .cells
+   #:read-cells-stream
+   #:write-cells-stream
 
-           #:pt
+   ;; O(n) life using lists of (x . y) coordinates
+   #:iterate-baseline-life
 
-           ;; Hashlife functions translated from this Python:
-           ;; https://github.com/johnhw/hashlife
-           #:show-life
-           #:show-side-by-side
-           #:align
-           #:same-pattern
-           #:baseline
-           #:get-address
-           #:a
-           #:b
-           #:c
-           #:d
-           #:k
-           #:n
-           #:construct
-           #:expand
-           #:successor
-           #:qtnode
-           #:pad
-           #:is-padded
-           #:q-join
-           #:inner
-           #:ffwd
-           #:advance
-           #:maybe-qtnode
-           #:life
-           #:crop
-           #:center
-           #:get-zero
-           #:life-4x4
-           #:*on*
-           #:*off*
+   #:pt
 
-           #:q-k
-           #:q-n
-           #:q-a
-           #:q-b
-           #:q-c
-           #:q-d
+   ;; Hashlife functions translated from this Python:
+   ;; https://github.com/johnhw/hashlife
+   #:show-life
+   #:show-side-by-side
+   #:align
+   #:same-pattern
+   #:baseline
+   #:get-address
+   #:a
+   #:b
+   #:c
+   #:d
+   #:k
+   #:n
+   #:construct
+   #:expand
+   #:successor
+   #:qtnode
+   #:pad
+   #:is-padded
+   #:q-join
+   #:inner
+   #:ffwd
+   #:advance
+   #:maybe-qtnode
+   #:life
+   #:crop
+   #:center
+   #:get-zero
+   #:life-4x4
+   #:*on*
+   #:*off*
 
-           #:*join-memo*
-           #:*successor-memo*
-           #:*zero-memo*
+   #:q-k
+   #:q-n
+   #:q-a
+   #:q-b
+   #:q-c
+   #:q-d
 
-           #:make-manual-memoizer
-           #:mm-enabled
-           #:mm-calls
-           #:mm-reset
-           #:mm-enable
-           #:mm-disable
-           #:mm-get
-           #:mm-add
-           #:mm-hash
-           #:mm-hits
-           #:mm-misses
-           #:mm-hash-table-size
-           #:mm-hash-function
+   #:testpat2
 
-           ))
+   #:*join-memo*
+   #:*successor-memo*
+   #:*zero-memo*
+
+   #:make-manual-memoizer
+   #:mm-enabled
+   #:mm-calls
+   #:mm-reset
+   #:mm-enable
+   #:mm-disable
+   #:mm-get
+   #:mm-add
+   #:mm-hash
+   #:mm-hits
+   #:mm-misses
+   #:mm-hash-table-size
+   #:mm-hash-function
+
+   ))

@@ -24,11 +24,9 @@
 (defparameter +command-line-spec+
   '((("output" #\o )
      :type string
-     :optional nil
      :documentation "The output directory for images.")
     (("input" #\i)
      :type string
-     :optional nil
      :documentation #.(format nil "The game of life file name from one of these directories: ~{ ~a~}~%" *game-file-dirs*) )
     (("type" #\t)
      :type string
@@ -74,63 +72,60 @@
                                         verbose
                                         help
                                         version)
-  (declare (ignorable rest-args verbose))
+  (declare (ignorable rest-args verbose) )
   (cond
-    (help
+    ((or help
+         (null output)
+         (null input))
      (command-line-arguments:show-option-help +command-line-spec+ :sort-names t))
     (version
      (show-version))
-    ((string= (string-downcase type)
-              "successor")
-     (animate-hashlife-successor output
-                                 (pathname-name input)
-                                 (make-hashlife input)
-                                 frame-count
-                                 :depth depth
-                                 :width width))
-    ((string= (string-downcase type)
-              "qt")
-     (animate-hashlife-qt output
-                          (pathname-name input)
-                          (make-hashlife input)
-                          frame-count
-                          :depth depth
-                          :width width))
 
-    ((string= (string-downcase type)
-              "baseline")
-     (animate-life output
-                   (pathname-name input)
-                   (make-life input)
-                   frame-count
-                   :level 0
-                   :width width
-                   :height width))
-    ((string= (string-downcase type)
-              "hashlife")
-     (animate-life output
-                   (pathname-name input)
-                   (make-hashlife input)
-                   frame-count
-                   :level 0
-                   :width width
-                   :height width)))
-  (uiop:quit))
+    (t
+     (let ((vc (make-viz-context output
+                                :base-filename (pathname-name input)
+                                :depth depth
+                                :view-width (vec2 width width))))
+       (cond
+         ((string= (string-downcase type)
+                   "successor")
+          (show-hashlife-successors vc
+                                    (make-hashlife input)
+                                    frame-count))
+                                    
+                                    
+         ((string= (string-downcase type)
+                   "qt")
+          (animate-hashlife-qt vc
+                               (make-hashlife input)
+                               frame-count))
+         
+         ((string= (string-downcase type)
+                   "baseline")
+          (animate-life vc
+                        (make-life input)
+                        frame-count))
+         ((string= (string-downcase type)
+                   "hashlife")
+          (animate-life vc
+                        (make-hashlife input)
+                        frame-count)))
+       (uiop:quit)))))
 
 (defun main (args)
   (command-line-arguments:handle-command-line 
-   ;; the spec as above, or prepared with prepare-command-line-options-specification
-   +command-line-spec+
-   ;; the function to call with the arguments as parsed
-   'hashlife-main-function
-   ;; the arguments to parse
-   :command-line (rest args)
-   ;; the program name to use in case of an error message
-   :name "hashlife"
-   ;; the number of mandatory positional arguments for this command (default: 0)
-   :positional-arity 0
-   ;; What to do with the rest of the positional arguments.
-   ;; T means pass the list of the rest of the command-line-arguments as one lisp argument.
-   ;; NIL means ignore it. A keyword means pass this rest as a keyword argument.
-   :rest-arity t))
+     ;; the spec as above, or prepared with prepare-command-line-options-specification
+     +command-line-spec+
+     ;; the function to call with the arguments as parsed
+     'hashlife-main-function
+     ;; the arguments to parse
+     :command-line (rest args)
+     ;; the program name to use in case of an error message
+     :name "hashlife"
+     ;; the number of mandatory positional arguments for this command (default: 0)
+     :positional-arity 0
+     ;; What to do with the rest of the positional arguments.
+     ;; T means pass the list of the rest of the command-line-arguments as one lisp argument.
+     ;; NIL means ignore it. A keyword means pass this rest as a keyword argument.
+     :rest-arity t))
   
