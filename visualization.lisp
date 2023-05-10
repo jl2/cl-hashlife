@@ -278,103 +278,44 @@
                          :view-min view-min
                          :view-width view-width)
             (svg:default-style outf)
-            (let ((x-offset 2)
-                  (y-offset 18))
+            (labels
+                ((draw-node (node current-depth min-x max-x min-y max-y)
+                   (with-slots (k n a b c d hash) node
+                     (let* ((node-width (- max-x min-x))
+                            (node-height (- max-y min-y))
+                            (mid-x (+ min-x
+                                      (/ node-width
+                                         2)))
+                            (mid-y (+ min-y
+                                      (/ node-height
+                                         2)))
+                            (size (expt 2 (q-k node)))
+                            (gray (- 1 (/ n (* size size) 1.0)))
+                            (fill-color (vec4  (* 0.2 gray) (* 0.9 gray) (* 0.1 gray) 1)))
 
-              (labels
-                  ((draw-node (node current-depth min-x max-x min-y max-y)
-                     (with-slots (k n a b c d hash) node
-                       (let* ((node-width (- max-x min-x))
-                              (node-height (- max-y min-y))
-                              (mid-x (+ min-x
-                                        (/ node-width
-                                           2)))
-                              (mid-y (+ min-y
-                                        (/ node-height
-                                           2)))
-                              (size (expt 2 (q-k node)))
-                              (gray (- 1 (/ n (* size size) 1.0)))
-                              (fill-color (vec4  (* 0.2 gray) (* 0.9 gray) (* 0.1 gray) 1))
-                              (font-size (ceiling (min 2
-                                                       (max 8
-                                                            (/ (- max-y min-y) 10.0))))))
+                       (svg:rectangle outf
+                                      (vec2 min-x min-y)
+                                      (vec2 node-width node-height)
+                                      :fill-color fill-color)
+                       (when (and  (= 1 n)
+                                   (= 0 k))
+                         (svg:circle outf
+                                     (vec2 mid-x mid-y)
+                                     (/ node-width 2.5)
+                                     :fill-color (vec4 0 0 0 1)))
 
-                         (svg:rectangle outf
-                                        (vec2 min-x min-y)
-                                        (vec2 node-width node-height)
-                                        :fill-color fill-color)
-                         (when (and  (= 1 n)
-                                     (= 0 k))
-                           (svg:circle outf
-                                       (vec2 mid-x mid-y)
-                                       (/ node-width 2.5)
-                                       :fill-color (vec4 0 0 0 1)))
-                         (let ((this-style (format nil "black-text-~a" k)))
-                           (svg:style outf (format nil ".~a { font: ~apt; fill: black; }" this-style font-size))
-                           (when label-nodes
-                             (svg:text outf
-                                       (vec2 (+ x-offset min-x) (+ min-y (* k y-offset)))
-                                       (format nil "~a ~a" (q-k node) (q-hash node))
-                                       :text-style this-style))
-                           )
+                       ;; Draw recursively when it's worth doing so
+                       (when (and (> (q-k node) 0)
+                                  (< current-depth depth)
+                                  (not (zerop (q-n node))))
 
+                         ;; Recursively draw nodes
+                         (draw-node a (1+ current-depth) min-x mid-x min-y mid-y)
+                         (draw-node b (1+ current-depth) mid-x max-x min-y mid-y)
+                         (draw-node c (1+ current-depth) min-x mid-x mid-y max-y)
+                         (draw-node d (1+ current-depth) mid-x max-x mid-y max-y))))))
 
-                         ;; Draw recursively when it's worth doing so
-                         (when (and (> (q-k node) 0)
-                                    (< current-depth depth)
-                                    (not (zerop (q-n node))))
-
-                           ;; Recursively draw nodes
-                           (draw-node a (1+ current-depth) min-x mid-x min-y mid-y)
-                           (draw-node b (1+ current-depth) mid-x max-x min-y mid-y)
-                           (draw-node c (1+ current-depth) min-x mid-x mid-y max-y)
-                           (draw-node d (1+ current-depth) mid-x max-x mid-y max-y)
-
-                           (when label-nodes
-                             ;; Draw label over the nodes
-                             ;; This is ugly, and I need a better way to display this
-                             (when a
-                               (let ((this-style (format nil "red-text-~a" k)))
-                                 (svg:style outf (format nil ".~a { font: ~apt; fill: red; }" this-style font-size))
-
-                                 (svg:text outf
-                                           (vec2 (+ x-offset mid-x)
-                                                 (+ min-y (* k y-offset)))
-                                           (format nil "~a ~a" (q-k a) (q-hash a))
-                                           :text-style this-style)))
-
-                             (when b
-                               (let ((this-style (format nil "green-text-~a" k)))
-                                 (svg:style outf (format nil ".~a { font: ~apt; fill: green; }" this-style font-size))
-
-                                 (svg:text outf
-                                           (vec2 (+ x-offset min-x)
-                                                 (+ max-y (* k y-offset)))
-                                           (format nil "~a ~a" (q-k b) (q-hash b))
-                                           :text-style this-style)))
-
-                             (when c
-                               (let ((this-style (format nil "blue-text-~a" k)))
-                                 (svg:style outf (format nil ".~a { font: ~apt; fill: blue; }" this-style font-size))
-                                 (svg:text outf
-                                           (vec2 (+ x-offset max-x)
-                                                 (- max-y (* k y-offset)))
-                                           (format nil "~a ~a" (q-k c) (q-hash c))
-                                           :text-style this-style)))
-
-                             (when d
-                               (let ((this-style (format nil "magenta-text-~a" k)))
-                                 (svg:style outf (format nil ".~a { font: ~apt; fill: magenta; }" this-style font-size))
-
-                                 (svg:text outf
-                                           (vec2 (+ min-x x-offset)
-                                                 (- max-y (* k  y-offset)))
-                                           (format nil "~a ~a" (q-k d) (q-hash d))
-                                           :text-style this-style)))))
-
-                         ))))
-
-                (draw-node node 0 0 (vx view-width) 0 (vy view-width))))))))))
+              (draw-node node 0 0 (vx view-width) 0 (vy view-width)))))))))
 
 
 (defun animate-life (context
