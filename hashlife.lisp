@@ -69,6 +69,7 @@
          8973110871315))
        (* 4318490180473
           (q-hash d))))))
+
 (defparameter *join-hash-function* #'hash-version-1)
 (declaim (type function *join-hash-function* ))
 (defun compute-hash (a b c d)
@@ -77,14 +78,14 @@
 
 
 
-(defparameter *join-memo* (make-manual-memoizer :hash-function #'compute-hash :enabled nil))
+(defparameter *join-memo* (make-manual-memoizer :hash-function #'compute-hash :enabled t))
 
 (defparameter *zero-memo* (make-manual-memoizer :hash-function #'identity :enabled t))
 
 (defparameter *successor-memo* (make-manual-memoizer :hash-function (lambda (node j) (+
                                                                                       (* 100000 (q-hash node))
                                                                                       j))
-                                                     :enabled nil))
+                                                     :enabled t))
 (defparameter *on* (make-qtnode :k 0 :n 1 :hash 1)
   "Base level binary node 1")
 
@@ -94,31 +95,33 @@
 (defparameter *mask* (1- (ash 1 63)))
 
 
-(defun join-table-stats ()
-  ;; (let ((cache-hit-rate (if (and (not (zerop *join-cache-misses*))
-  ;;                                           (not  (zerop *join-cache-hits*)))
-  ;;                                      (/ *join-cache-hits*
-  ;;                                         (+ *join-cache-hits* *join-cache-misses*)
-  ;;                                         1.0)
-  ;;                                      0)))
-  ;;   (multiple-value-bind (g10 g20 g50 g100 g500 g1000)
-  ;;       (loop :for pt
-  ;;               :being :the hash-keys :of *join-table*
-  ;;                 :using (hash-value node)
-  ;;             :counting (> (q-n node) 10) :into g10
-  ;;             :counting (> (q-n node) 20) :into g20
-  ;;             :counting (> (q-n node) 50) :into g50
-  ;;             :counting (> (q-n node) 100) :into g100
-  ;;             :counting (> (q-n node) 500) :into g500
-  ;;             :counting (> (q-n node) 1000) :into g1000
-  ;;             :finally (return (values g10 g20 g50 g100 g500 g1000)))
-  ;;     (format t "Cache hit rate: ~a~%" cache-hit-rate)
-  ;;     (format t "Nodes >10 pop : ~a~%" g10)
-  ;;     (format t "Nodes >20 pop : ~a~%" g20)
-  ;;     (format t "Nodes >50 pop : ~a~%" g50)
-  ;;     (format t "Nodes >100 pop : ~a~%" g100)
-  ;;     (format t "Nodes >500 pop : ~a~%" g500)
-  ;;     (format t "Nodes >1000 pop : ~a~%" g1000)))
+(defun mm-stats (memo)
+  (with-slots (hash-table hit-count miss-count hi-count call-count) memo
+    (let* (
+           (cache-hit-rate (if (and (not (zerop  hit-count))
+                                    (not  (zerop call-count)))
+                               (/ hit-count
+                                  call-count
+                                  1.0)
+                               0)))
+      (multiple-value-bind (g10 g20 g50 g100 g500 g1000)
+          (loop :for pt
+                  :being :the hash-keys :of hash-table
+                    :using (hash-value node)
+                :counting (> (q-n node) 10) :into g10
+                :counting (> (q-n node) 20) :into g20
+                :counting (> (q-n node) 50) :into g50
+                :counting (> (q-n node) 100) :into g100
+                :counting (> (q-n node) 500) :into g500
+                :counting (> (q-n node) 1000) :into g1000
+                :finally (return (values g10 g20 g50 g100 g500 g1000)))
+        (format t "Cache hit rate: ~a~%" cache-hit-rate)
+        (format t "Nodes >10 pop : ~a~%" g10)
+        (format t "Nodes >20 pop : ~a~%" g20)
+        (format t "Nodes >50 pop : ~a~%" g50)
+        (format t "Nodes >100 pop : ~a~%" g100)
+        (format t "Nodes >500 pop : ~a~%" g500)
+        (format t "Nodes >1000 pop : ~a~%" g1000))))
   )
 
 (defun q-join (a b c d)
@@ -235,34 +238,6 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                           m.c.b  m.d.a  m.d.b
                           m.c.d  m.d.c  m.d.d))))))))
 
-
-(defun successor-table-stats ()
-  ;; (let ((cache-hit-rate (if (and (not (zerop *successor-cache-misses*))
-  ;;                                (not  (zerop *successor-cache-hits*)))
-  ;;                           (/ *successor-cache-hits*
-  ;;                              (+ *successor-cache-hits* *successor-cache-misses*)
-  ;;                              1.0)
-  ;;                           0)))
-  ;;   (multiple-value-bind (g10 g20 g50 g100 g500 g1000)
-  ;;       (loop :for pt
-  ;;               :being :the hash-keys :of *successor-table*
-  ;;                 :using (hash-value node)
-  ;;             :counting (> (q-n node) 10) :into g10
-  ;;             :counting (> (q-n node) 20) :into g20
-  ;;             :counting (> (q-n node) 50) :into g50
-  ;;             :counting (> (q-n node) 100) :into g100
-  ;;             :counting (> (q-n node) 500) :into g500
-  ;;             :counting (> (q-n node) 1000) :into g1000
-  ;;             :finally (return (values g10 g20 g50 g100 g500 g1000)))
-  ;;     (format t "Cache hit rate: ~a~%" cache-hit-rate)
-  ;;     (format t "Nodes >10 pop : ~a~%" g10)
-  ;;     (format t "Nodes >20 pop : ~a~%" g20)
-  ;;     (format t "Nodes >50 pop : ~a~%" g50)
-  ;;     (format t "Nodes >100 pop : ~a~%" g100)
-  ;;     (format t "Nodes >500 pop : ~a~%" g500)
-  ;;     (format t "Nodes >1000 pop : ~a~%" g1000)))
-  )
-
 (defun inner-successors (m j)
   (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) m
     (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) m.a
@@ -304,61 +279,61 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                       c4 c5 c6
                       c7 c8 c9))))))))
 
-(defun successor (m &optional (in-j (- (q-k m) 2)))
+(defun successor (node &optional (in-j (- (q-k node) 2)))
   "Return the 2**k-1 x 2**k-1 successor, 2**j generations in the future,
 where j<= k-2, caching the result."
-  (declare (type qtnode m)
+  (declare (type qtnode node)
            (type (or null integer)  in-j))
-  (let* ((j (min in-j (- (q-k m) 2))))
+  (let* ((j (min in-j (- (q-k node) 2))))
     (when (< j 0)
       (error "j ~a < 0" j))
-    (flet ((inner-successor ()
-             (cond
-               ((zerop (q-n m))
-                (q-a m))
+    (flet
+        ((inner-successor ()
+           (cond
+             ((zerop (q-n node))
+              (q-a node))
 
-               ((= 2 (q-k m))
-                (life-4x4 m))
+             ((= 2 (q-k node))
+              (life-4x4 node))
 
-               (t
-                (multiple-value-bind (c1 c2 c3
-                                      c4 c5 c6
-                                      c7 c8 c9)
-                    (inner-successors m j)
-                  ;;(break)
-                  (if (< j (- (q-k m) 2) )
-                      (q-join
-                       (q-join (q-d c1) (q-c c2)
-                               (q-b c4) (q-a c5))
-                       (q-join (q-d c2) (q-c c3)
-                               (q-b c5) (q-a c6))
+             (t
+              (multiple-value-bind (c1 c2 c3
+                                    c4 c5 c6
+                                    c7 c8 c9)
+                  (inner-successors node j)
+                ;;(break)
+                (if (< j (- (q-k node) 2) )
+                    (q-join
+                     (q-join (q-d c1) (q-c c2)
+                             (q-b c4) (q-a c5))
+                     (q-join (q-d c2) (q-c c3)
+                             (q-b c5) (q-a c6))
 
-                       (q-join (q-d c4) (q-c c5)
-                               (q-b c7) (q-a c8))
-                       (q-join (q-d c5) (q-c c6)
-                               (q-b c8) (q-a c9)))
-
-                      (q-join
-                       (successor (q-join c1 c2
-                                          c4 c5)
-                                  j)
-                       (successor (q-join c2 c3
-                                          c5 c6)
-                                  j)
-                       (successor (q-join c4 c5
-                                          c7 c8)
-                                  j)
-                       (successor (q-join c5 c6
-                                          c8 c9)
-                                  j))))))))
-      (multiple-value-bind (val found) (mm-get *successor-memo* m j)
+                     (q-join (q-d c4) (q-c c5)
+                             (q-b c7) (q-a c8))
+                     (q-join (q-d c5) (q-c c6)
+                             (q-b c8) (q-a c9)))
+                    (q-join
+                     (successor (q-join c1 c2
+                                        c4 c5)
+                                j)
+                     (successor (q-join c2 c3
+                                        c5 c6)
+                                j)
+                     (successor (q-join c4 c5
+                                        c7 c8)
+                                j)
+                     (successor (q-join c5 c6
+                                        c8 c9)
+                                j))))))))
+      (multiple-value-bind (val found) (mm-get *successor-memo* node j)
         (cond
           (found
            val)
 
           ((not found)
            (mm-add *successor-memo*
-                   (list m in-j)
+                   (list node in-j)
                    (inner-successor))))))))
 
 (defun construct (pts)

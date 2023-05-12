@@ -121,6 +121,7 @@
               res)))))
 
 (defun dot-node (context node &optional name)
+  (qt-to-svg context node)
   (with-slots (dot-stream dot-nodes) context
     (when (not (or (zerop (q-n node)) ))
       (when (not (find (q-hash node) dot-nodes :test #'=))
@@ -259,7 +260,6 @@
                                                         1.0))))))))))))
 (defun qt-to-svg (context node &optional name-override)
   (with-slots (stroke-width output-directory stroke-color
-               label-nodes
                view-width view-min depth created-files created-node-files)
       context
     (when (not (find (q-hash node)
@@ -667,18 +667,24 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                      it)
              (show-qt-transition context node it (format nil "successor ~a" j))
              it)))))))
+
 (defun show-advance (context node n)
   "Advance node by exactly n generations, using the binary
 expansion of n to find the correct successors."
+
   (declare (ignorable node n))
+
   (when (= 0 n)
     (return-from show-advance node))
+
   (maybe-start-dot-file (context "advance")
     (let* ((bit-count (1+ (ceiling (log n 2))))
            (new-node (loop
-                       :for new-node = (center node) :then (center new-node)
+                       :for new-node = (center node)
+                         :then (center new-node)
                        :for k :below bit-count
-                       :finally (return new-node))))
+                       :finally
+                          (return new-node))))
       (when (null new-node)
         (format t "Warning: new-node is null!~%"))
 
@@ -698,7 +704,9 @@ expansion of n to find the correct successors."
           (if bit
               (successor next-node j)
               next-node)
-        :do (show-qt-transition context prev-node next-node (format nil "advance ~a" j))
+        :do (show-qt-transition context
+                                prev-node
+                                next-node
+                                (format nil "advance ~a" j))
 
-        :finally (return next-node))
-      )))
+        :finally (return next-node)))))

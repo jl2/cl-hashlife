@@ -68,6 +68,7 @@
    ;; Hashlife functions translated from this Python:
    ;; https://github.com/johnhw/hashlife
    #:show-life
+   #:show-life-iteration
    #:show-side-by-side
    #:align
    #:same-pattern
@@ -124,5 +125,5 @@
    #:mm-misses
    #:mm-hash-table-size
    #:mm-hash-function
-
+   #:mm-stats
    ))

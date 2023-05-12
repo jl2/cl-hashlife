@@ -407,7 +407,6 @@
     (with-open-file (stream path)
       (funcall (find-reader path) stream))))
 
-
 (defun write-game-file (pts file-name &optional (comment "Written by cl-hashlife"))
   (cond
     ((str:ends-with? ".life" file-name)
@@ -422,6 +421,36 @@
                              :if-exists :supersede
                              :external-format :utf8)
        (write-cells-stream stream pts comment)))))
+
+(defgeneric show-life-iteration (node n &optional stream level)
+  (:documentation "Pretty print a life game iteration to stream."))
+
+(defmethod show-life-iteration ((node qtnode)
+                                n
+                                &optional (stream t) (level 0))
+  (loop
+    :for current = node :then (advance node i)
+    :for i :below n
+    :do
+       (show-life current stream level)
+    :finally (return current)))
+
+(defmethod show-life-iteration ((node string)
+                                n
+                                &optional (stream t) (level 0))
+  (show-life-iteration (make-hashlife node) n stream level))
+
+(defmethod show-life-iteration ((node list)
+                                n
+                                &optional (stream t) (level 0))
+  (loop
+    :for current = node :then (iterate-baseline-life current)
+    :for i :below n
+    :do
+       (show-life current stream level)
+    :finally (return current)))
+
+
 
 (defgeneric show-life (node &optional stream level)
   (:documentation "Pretty print a life game to stream."))
