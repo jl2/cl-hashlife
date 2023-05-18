@@ -16,7 +16,7 @@
 
 (in-package :cl-hashlife)
 
-
+(declaim (optimize (speed 1) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
 (defun qtnode-hash-func (val)
   (sxhash (q-hash val)))
 ;;(sb-ext:define-hash-table-test qtnode-hash qtnode-hash-func)
@@ -41,13 +41,18 @@
   (logand num (- (ash 1 63) 1)))
 
 (defun hash-version-1 (a b c d)
+  (declare (optimize (speed 1) (space 3) (safety 0) (debug 0))
+           (type qtnode a b c d))
   (to-64-bit (+ (q-k a)
                 2
                 (to-64-bit (* 5131830419411 (q-hash a)))
                 (to-64-bit (* 3758991985019 (q-hash b)))
                 (to-64-bit (* 8973110871315 (q-hash c)))
                 (to-64-bit (* 4318490180473 (q-hash d))))))
+
 (defun hash-version-2 (a b c d)
+  (declare (optimize (speed 2) (space 3) (safety 0) (debug 0))
+           (type qtnode a b c d))
   (+ (q-k a)
      2
      (to-64-bit
@@ -70,10 +75,11 @@
        (* 4318490180473
           (q-hash d))))))
 
-(defparameter *join-hash-function* #'hash-version-1)
+(defparameter *join-hash-function* #'hash-version-2)
 (declaim (type function *join-hash-function* ))
 (defun compute-hash (a b c d)
-  (declare (optimize (speed 3) (space 3) (safety 0) (debug 0)))
+  (declare (optimize (speed 2) (space 3) (safety 0) (debug 0))
+           (type qtnode a b c d))
   (funcall *join-hash-function* a b c d))
 
 
@@ -106,8 +112,9 @@
                                0)))
       (multiple-value-bind (g10 g20 g50 g100 g500 g1000)
           (loop :for pt
-                  :being :the hash-keys :of hash-table
-                    :using (hash-value node)
+                  :being :the hash-keys
+                    :of hash-table
+                      :using (hash-value node)
                 :counting (> (q-n node) 10) :into g10
                 :counting (> (q-n node) 20) :into g20
                 :counting (> (q-n node) 50) :into g50
@@ -121,8 +128,7 @@
         (format t "Nodes >50 pop : ~a~%" g50)
         (format t "Nodes >100 pop : ~a~%" g100)
         (format t "Nodes >500 pop : ~a~%" g500)
-        (format t "Nodes >1000 pop : ~a~%" g1000))))
-  )
+        (format t "Nodes >1000 pop : ~a~%" g1000)))))
 
 (defun q-join (a b c d)
   "Combine four children at level `k-1` to a new node at level `k`.
@@ -138,7 +144,6 @@ Otherwise, create a new node, and add it to the cache."
       ((not found)
        (mm-add *join-memo* (list a b c d)
                (progn
-                 ;;(break)
                  (make-qtnode :k (1+ (q-k a))
                               :a a
                               :b b
@@ -172,18 +177,19 @@ Otherwise, create a new node, and add it to the cache."
 (defun center (m &optional (times 1))
   "Return a node at level `k+1`, which is centered on the given quadtree node."
   (declare (type qtnode m))
-  (let ((z (get-zero (q-k (q-a m)))))
-    (with-slots (a b c d) m
-
-      (let ((next (q-join
-                   (q-join z z z a)
-                   (q-join z z b z)
-                   (q-join z c z z)
-                   (q-join d z z z))))
-        (if (= times 1)
-            next
-            (center next (- times 1)))))))
-
+  (loop :for i :to times
+        :for z = (get-zero (q-k (q-a m)))
+          :then (get-zero (q-k (q-a centered)))
+        :for centered = m
+          :then
+          (with-slots (a b c d) centered
+            (q-join
+             (q-join z z z a)
+             (q-join z z b z)
+             (q-join z c z z)
+             (q-join d z z z)))
+        :finally (return centered)))
+(declaim (inline inner-successor ssuccessor q-join life life-4x4))
 (defun life (a b c
              d e f
              g h i)
@@ -193,14 +199,18 @@ Returns *on* if should be on, *off* otherwise."
                  a b c
                  d e f
                  g h i ))
-  (let* ((outer (loop :for node
-                        :in (list a b c
-                                  d   f
-                                  g h i)
-                      :summing (q-n node))))
+  (let* ((outer (+ (q-n a)
+                   (q-n b)
+                   (q-n c)
+                   (q-n d)
+                   (q-n f)
+                   (q-n g)
+                   (q-n h)
+                   (q-n i))))
     (declare (type integer outer))
     (if (or (= outer 3)
-            (= 2 outer (q-n e)))
+            (and  (= 2 outer)
+                  (= 1 (q-n e))))
         *on*
         *off*)))
 
@@ -211,73 +221,74 @@ if we have a k=2 4x4 block,
 we can compute the 2x2 central successor by iterating over all
 the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
   (declare (type qtnode m))
-  (with-slots ((ma a) (mb b) (mc c) (md d)) m
-    (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) ma
-      (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) mb
-        (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) mc
-          (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) md
-            (q-join
-             ;; Copy/pasted from. .(find-file-other-window "~/src/hashlife/hashlife.py" )
-             ;; na = life(m.a.a, m.a.b, m.b.a, m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a)  # AD
-             (life        m.a.a  m.a.b  m.b.a
-                          m.a.c  m.a.d  m.b.c
-                          m.c.a  m.c.b  m.d.a)
+  (q-join
+   ;; Copy/pasted from. .(find-file-other-window "~/src/hashlife/hashlife.py" )
+   ;; na = life(m.a.a, m.a.b, m.b.a, m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a)  # AD
+   (life        (q-a (q-a m))  (q-b (q-a m))  (q-a (q-b m))
+                (q-c (q-a m))  (q-d (q-a m))  (q-c (q-b m))
+                (q-a (q-c m))  (q-b (q-c m))  (q-a (q-d m)))
 
-             ;; nb = life(m.a.b, m.b.a, m.b.b, m.a.d, m.b.c, m.b.d, m.c.b, m.d.a, m.d.b)  # BC
-             (life        m.a.b  m.b.a  m.b.b
-                          m.a.d  m.b.c  m.b.d
-                          m.c.b  m.d.a  m.d.b)
+   ;; nb = life((q-b (q-a m)), (q-a (q-b m)), (q-b (q-b m)), (q-d (q-a m)), (q-c (q-b m)), (q-d (q-b m)), (q-b (q-c m)), (q-a (q-d m)), (q-b (q-d m)))  # BC
+   (life        (q-b (q-a m))  (q-a (q-b m))  (q-b (q-b m))
+                (q-d (q-a m))  (q-c (q-b m))  (q-d (q-b m))
+                (q-b (q-c m))  (q-a (q-d m))  (q-b (q-d m)))
 
-             ;; nc = life(m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a, m.c.c, m.c.d, m.d.c)  # CB
-             (life        m.a.c  m.a.d  m.b.c
-                          m.c.a  m.c.b  m.d.a
-                          m.c.c  m.c.d  m.d.c)
+   ;; nc = life(m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a, m.c.c, m.c.d, m.d.c)  # CB
+   (life        (q-c (q-a m))  (q-d (q-a m))  (q-c (q-b m))
+                (q-a (q-c m))  (q-b (q-c m))  (q-a (q-d m))
+                (q-c (q-c m))  (q-d (q-c m))  (q-c (q-d m)))
 
-             ;; nd = life(m.a.d, m.b.c, m.b.d, m.c.b, m.d.a, m.d.b, m.c.d, m.d.c, m.d.d)  # DA
-             (life        m.a.d  m.b.c  m.b.d
-                          m.c.b  m.d.a  m.d.b
-                          m.c.d  m.d.c  m.d.d))))))))
+   ;; nd = life(m.a.d, m.b.c, m.b.d, m.c.b, m.d.a, m.d.b, m.c.d, m.d.c, m.d.d)  # DA
+   (life        (q-d (q-a m))  (q-c (q-b m))  (q-d (q-b m))
+                (q-b (q-c m))  (q-a (q-d m))  (q-b (q-d m))
+                (q-d (q-c m))  (q-c (q-d m))  (q-d (q-d m)))))
 
 (defun inner-successors (m j)
-  (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) m
-    (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) m.a
-      (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) m.b
-        (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) m.c
-          (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) m.d
-            (let (
-                  ;; Top Row
-                  (c1 (successor m.a
-                                 j))
+  (let (
+        ;; Top Row
+        (c1 (successor (q-a m)
+                       j))
 
-                  (c2 (successor (q-join m.a.b  m.b.a
+        (c2 (successor (q-join (q-b (q-a m))  (q-a (q-b m))
 
-                                         m.a.d  m.b.c)
-                                 j))
-                  (c3 (successor m.b
-                                 j))
+                               (q-d (q-a m))  (q-c (q-b m)))
+                       j))
+        (c3 (successor (q-b m)
+                       j))
 
-                  ;; Middle Row
-                  (c4 (successor (q-join m.a.c  m.a.d
-                                         m.c.a  m.c.b)
-                                 j))
-                  (c5 (successor (q-join m.a.d  m.b.c
-                                         m.c.b  m.d.a)
-                                 j))
-                  (c6 (successor (q-join m.b.c  m.b.d
-                                         m.d.a  m.d.b)
-                                 j))
+        ;; Middle Row
+        (c4 (successor (q-join (q-c (q-a m))  (q-d (q-a m))
+                               (q-a (q-c m))  (q-b (q-c m)))
+                       j))
+        (c5 (successor (q-join (q-d (q-a m))  (q-c (q-b m))
+                               (q-b (q-c m))  (q-a (q-d m)))
+                       j))
+        (c6 (successor (q-join (q-c (q-b m))  (q-d (q-b m))
+                               (q-a (q-d m))  (q-b (q-d m)))
+                       j))
 
-                  ;; Bottom row
-                  (c7 (successor m.c
-                                 j))
-                  (c8 (successor (q-join m.c.b  m.d.a
-                                         m.c.d  m.d.c)
-                                 j))
-                  (c9 (successor m.d
-                                 j)))
-              (values c1 c2 c3
-                      c4 c5 c6
-                      c7 c8 c9))))))))
+        ;; Bottom row
+        (c7 (successor (q-c m)
+                       j))
+        (c8 (successor (q-join (q-b (q-c m))  (q-a (q-d m))
+                               (q-d (q-c m))  (q-c (q-d m)))
+                       j))
+        (c9 (successor (q-d m)
+                       j)))
+
+    ;; (format t "m ~a~%" m)
+    ;; (format t "(q-a m) ~a~%(q-b m) ~a~%(q-c m) ~a~%(q-d m) ~a~%" (q-a m) (q-b m) (q-c m) (q-d m) )
+    ;; (format t "(q-a (q-a m)) ~a~%(q-b (q-a m)) ~a~%(q-c (q-a m)) ~a~%(q-d (q-a m)) ~a~%" (q-a (q-a m)) (q-b (q-a m)) (q-c (q-a m)) (q-d (q-a m)))
+    ;; (format t "(q-a (q-b m)) ~a~%(q-b (q-b m)) ~a~%(q-c (q-b m)) ~a~%(q-d (q-b m)) ~a~%" (q-a (q-b m)) (q-b (q-b m)) (q-c (q-b m)) (q-d (q-b m)))
+    ;; (format t "(q-a (q-c m)) ~a~%(q-b (q-c m)) ~a~%(q-c (q-c m)) ~a~%(q-d (q-c m)) ~a~%" (q-a (q-c m)) (q-b (q-c m)) (q-c (q-c m)) (q-d (q-c m)))
+    ;; (format t "(q-a (q-d m)) ~a~%(q-b (q-d m)) ~a~%(q-c (q-d m)) ~a~%(q-d (q-d m)) ~a~%" (q-a (q-d m)) (q-b (q-d m)) (q-c (q-d m)) (q-d (q-d m)))
+    ;; (format t "c1 ~a~%c2 ~a~%c3 ~a~%c4 ~a~%c5 ~a~%c6 ~a~%c7 ~a~%c8 ~a~%c9 ~a~%"
+    ;;         c1 c2 c3 c4 c5 c6 c7 c8 c9)
+
+
+    (values c1 c2 c3
+            c4 c5 c6
+            c7 c8 c9)))
 
 (defun successor (node &optional (in-j (- (q-k node) 2)))
   "Return the 2**k-1 x 2**k-1 successor, 2**j generations in the future,
@@ -444,7 +455,8 @@ expansion of n to find the correct successors."
     (return-from advance node))
   (let* ((bit-count (1+ (ceiling (log n 2))))
          (new-node (loop
-                     :for new-node = (center node) :then (center new-node)
+                     :for new-node = (center node)
+                       :then (center new-node)
                      :for k :below bit-count
                      :finally (return new-node))))
     (when (null new-node)
@@ -454,20 +466,18 @@ expansion of n to find the correct successors."
     ;;       :for nod = (successor new-node )
     ;;         :then (successor nod 1)
     ;;       :finally (return nod))
+
     (loop
-      :for k :from 0 :below (1+ bit-count)
+      :for k :from 0 :to (1+ bit-count)
       :for bit = (logbitp k n)
       :for j = (- bit-count k 1)
-      :for next-node = (if bit
-                           (successor new-node j)
-                           new-node)
+      :for next-node = new-node
         :then
         (if bit
             (successor next-node j)
             next-node)
-
-      :finally (return next-node))
-    ))
+      :finally
+         (return (crop next-node)))))
 
 (defun is-padded (node)
   (with-slots (a b c d) node
@@ -527,8 +537,7 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
           (pt (ash x reduction)
               (ash y reduction)
               (/ (q-n node)
-                 (* size size)
-                 1.0)))))
+                 (* size size))))))
 
       ;; Otherwise try expanding the children
       (t
@@ -584,13 +593,14 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
     (loop
       :for i fixnum :below n
       :for this-pat = pat
-        :then (hl::iterate-baseline-life this-pat)
-      :for advanced = (hl::advance node i)
+        :then (baseline-advance pat i)
+      :for this-node = node
+        :then (advance node i)
       :do
          (format stream "baseline~%===========================================================================================~%")
          (show-life this-pat stream)
          (format stream "~%hashlife~%===========================================================================================~%")
-         (show-life advanced stream)
+         (show-life this-node stream)
          (format stream "====================================================================================================~%"))))
 
 (defun crop-points (pts lower-left upper-right)
@@ -616,7 +626,7 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
                    *off* *off*)
            (q-join *on* *on*
                    *off* *off*))
-   
+
    (q-join (q-join *off* *off*
                    *on* *on*)
            (q-join *off* *off*

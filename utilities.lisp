@@ -22,18 +22,22 @@
                                 "~/src/hashlife/lifep/"))
 
 
-(deftype maybe-node () '(or null qtnode))
+(deftype maybe-node ()
+  "A qtnode or null."
+  '(or null qtnode))
 
-(defstruct (qtnode (:conc-name q-) )
-  (k 1 :type integer)
+(defstruct (qtnode (:conc-name q-))
+  "A quad tree node"
+  (k 1 :type fixnum)
   (a nil :type maybe-node)
   (b nil :type maybe-node)
   (c nil :type maybe-node)
   (d nil :type maybe-node)
-  (n nil :type integer)
-  (hash nil :type integer))
+  (n nil :type fixnum)
+  (hash nil :type fixnum))
 
-(defun get-address (node address)
+(defun get-by-address (node address)
+  "Return a quadtree node using a string of the form \"abbcdd\" to index into the string."
   (loop
     :for next-node = node
       :then (slot-value next-node
@@ -44,18 +48,20 @@
     :for addr :across address
     :finally
        (return next-node)))
+(declaim (inline make-life-point pt pt-< pt-+ pt-- pt-= even-pt right-pt corner-pt pt-x pt-y pt-in-box p))
 
 (defstruct (life-point (:conc-name pt-) )
-  (x 0 :type integer)
-  (y 0 :type integer)
-  (gray 0 :type (or number qtnode)))
+  (x 0 :type fixnum)
+  (y 0 :type fixnum)
+  (gray 0 :type (or fixnum rational qtnode)))
+
 
 (defun pt (x y &optional (gray 1))
-  (declare (type integer x y)
-           (type (or number qtnode) gray))
+  (declare (type fixnum x y)
+           (type (or fixnum qtnode) gray))
   (make-life-point :x x
-                :y y
-                :gray gray))
+                   :y y
+                   :gray gray))
 
 (defun pt-< (a b)
   (declare (type life-point a b))
@@ -77,42 +83,34 @@
        (= (pt-y a) (pt-y b))))
 
 (defun pt-+ (a b)
-  (with-slots ((x1 x) (y1 y) gray) a
-    (with-slots ((x2 x) (y2 y)) b
-      (make-life-point :x (+ x1 x2)
-                       :y (+ y1 y2)
-                       :gray gray))))
+  (make-life-point :x (+ (pt-x a) (pt-x b))
+                   :y (+ (pt-y a) (pt-y b))
+                   :gray (pt-gray a)))
 
 (defun pt-- (a b)
-  (with-slots ((x1 x) (y1 y) gray) a
-    (with-slots ((x2 x) (y2 y)) b
-      (make-life-point :x (- x1 x2)
-                       :y (- y1 y2)
-                       :gray gray))))
+  (make-life-point :x (- (pt-x a) (pt-x b))
+                   :y (- (pt-y a) (pt-y b))
+                   :gray (pt-gray a)))
 
 (defun even-pt (pt)
-  (with-slots (x y gray) pt
-    (pt (- x (logand x 1))
-        (- y (logand y 1))
-        gray)))
+  (make-life-point :x (- (pt-x pt) (logand (pt-x pt) 1))
+                   :y (- (pt-y pt) (logand (pt-y pt) 1))
+                   :gray (pt-gray pt)))
 
 (defun right-pt (pt)
-  (with-slots (x y gray) pt
-    (pt (1+ x)
-        y
-        gray)))
+  (make-life-point :x (1+ (pt-x pt))
+                   :y (pt-y pt) 
+                   :gray (pt-gray pt)))
 
 (defun down-pt (pt)
-  (with-slots (x y gray) pt
-    (pt x
-        (1+ y)
-        gray)))
+  (make-life-point :x (pt-x pt)
+                   :y (1+ (pt-y pt)) 
+                   :gray (pt-gray pt)))
 
 (defun corner-pt (pt)
-  (with-slots (x y gray) pt
-    (pt (1+ x)
-        (1+ y)
-        gray)))
+  (make-life-point :x (1+ (pt-x pt))
+                   :y (1+ (pt-y pt)) 
+                   :gray (pt-gray pt)))
 
 
 (defun read-rle-stream (stream)
@@ -444,7 +442,8 @@
                                 n
                                 &optional (stream t) (level 0))
   (loop
-    :for current = node :then (iterate-baseline-life current)
+    :for current = node
+      :then (iterate-baseline-life current)
     :for i :below n
     :do
        (show-life current stream level)
@@ -462,8 +461,7 @@
 
 (defmethod show-life ((node string)
                       &optional (stream t) (level 0))
-  (values node
-          (show-life-list stream (read-game-file node) level)))
+  (show-life (make-life node) stream level))
 
 (defmethod show-life ((node list)
                       &optional (stream t) (level 0))
@@ -472,42 +470,55 @@
 
 (defun show-life-list (stream pts
                        &optional (level 0))
+
+  (declare (type (or  stream t) stream)
+           (type  list pts)
+           (type  fixnum level))
   (flet ((normalize (x)
-           (ash x level)))
+           (declare (type fixnum x))
+           (the fixnum (ash x level))))
+
     (let ((cnt 0)
           (remaining-pts (sort pts
                                #'pt-<)))
-      (multiple-value-bind (min-x min-y max-x max-y)
-          (loop :for pt :in remaining-pts
-                :minimizing (pt-x pt) :into min-x
-                :minimizing (pt-y pt) :into min-y
-                :maximizing (pt-x pt) :into max-x
-                :maximizing (pt-y pt) :into max-y
-                :finally (return (values min-x min-y max-x max-y)))
+      (declare (type fixnum cnt)
+               (type list remaining-pts))
+      (multiple-value-bind (min-x min-y
+                            max-x max-y)
+          (loop
+            :for pt :in remaining-pts
+            :minimizing (pt-x pt) :into min-x fixnum 
+            :minimizing (pt-y pt) :into min-y fixnum
+            :maximizing (pt-x pt) :into max-x fixnum 
+            :maximizing (pt-y pt) :into max-y fixnum
+            :finally (return (values min-x min-y max-x max-y)))
+        (declare (type fixnum min-x min-y max-x max-y))
         (loop
-          :for y :from (normalize min-y) :to (normalize max-y)
-          :for real-y :from min-y :to max-y
+          :for y fixnum :from (normalize min-y)
+            :to (normalize max-y)
+          :for real-y fixnum :from min-y
+            :to max-y
           :do
-            (loop
-              :for x :from (normalize min-x) :to (normalize max-x)
-              :for real-x :from min-x :to max-x
-              :for elem = (pt real-x real-y)
-              :do
-                 (if-let ((it (find elem remaining-pts :test #'pt-= )))
-                   (progn
-                     ;;(declare (type life-point it))
-                     (setf remaining-pts (remove elem remaining-pts :test #'pt-=))
-                     (incf cnt)
-                     (with-slots (gray) it
-                       (cond ((> gray 0.7)
-                              (format stream "██"))
-                             ((> gray 0.5)
-                              (format stream "▒▒"))
-                             ((> gray 0.2)
-                              (format stream "░░")))))
-                   (format stream "  ")))
-            (format stream "~%")))
-      (format stream ".~%")
+             (loop
+               :for x fixnum :from (normalize min-x) :to (normalize max-x)
+               :for real-x fixnum :from min-x :to max-x
+               :for elem = (pt real-x real-y)
+               :do
+                  (if-let ((it (find elem remaining-pts :test #'pt-=)))
+                    (progn
+                      (setf remaining-pts (remove elem remaining-pts :test #'pt-=))
+                      (incf cnt)
+                      (with-slots (gray) it
+                        (declare (type number gray))
+                        (cond ((> gray 0.7)
+                               (format stream "██"))
+                              ((> gray 0.5)
+                               (format stream "▒▒"))
+                              ((> gray 0.2)
+                               (format stream "░░")))))
+                    (format stream "  ")))
+             (format stream "~%")))
+      (format stream "⛳~%")
       (values cnt))))
 
 (defparameter *baseline-temp-table* (make-hash-table :test 'equalp :size 100)
@@ -524,9 +535,9 @@
   "The baseline implementation of the Game of Life.
 Takes a list of (x, y) cells and returns a new set of cells in
 the next generation."
-
+  (declare (dynamic-extent pts))
   (let ((counter (make-hash-table :test 'equalp :size 100)))
-
+    (declare (dynamic-extent counter))
     ;; Count neighbors
     (loop
       :for pt :in pts
@@ -557,3 +568,22 @@ the next generation."
     :for game = pts :then (iterate-baseline-life game)
     :for i :below times
     :finally (return game)))
+
+
+(defun show-all-life-files-in-directory (&key
+                                           (directory (car *game-file-dirs*))
+                                           (filter uiop/pathname:*wild-file-for-directory*)
+                                           (size-limit-in-bytes (* 100 1024)))
+  (loop :for file-name :in (uiop:directory-files directory filter)
+        :for fname = (concatenate 'string
+                                  (pathname-name file-name)
+                                  "."
+                                  (pathname-type file-name))
+        :for fsize = (with-open-file (stream file-name) (file-length stream))
+        :for life = (when (< fsize size-limit-in-bytes)
+                        (make-life fname))
+        :when life
+          :do
+             (format t "~a (~a):~%" file-name fname)
+             (hl:show-life life t)
+             (format t "~a~%~%" (make-string 120 :initial-element #\#))))

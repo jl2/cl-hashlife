@@ -103,13 +103,15 @@
 
 (defun verify-baseline (pat n)
   (let ((node (hl::construct pat)))
-    (is (same-pattern pat (hl::expand node)))
+    (is (same-pattern pat
+                      (hl::expand node)))
     (loop
       :for i :below n
       :for this-pat = pat
         :then (hl::iterate-baseline-life this-pat)
       :for advanced = (hl::advance node i)
-      :do (is (same-pattern this-pat (hl::expand advanced))))))
+      :do
+         (is (same-pattern this-pat (hl::expand advanced))))))
 
 (test gray
   (let* ((pat (hl::read-game-file "BREEDER.LIF"))

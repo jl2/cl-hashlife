@@ -32,7 +32,7 @@
    #:show-hashlife-successors
    #:show-successor
    #:show-advance
-   
+   #:show-all-life-files-in-directory
    #:make-viz-context
    #:show-join
    #:show-inner-successors
@@ -73,7 +73,7 @@
    #:align
    #:same-pattern
    #:baseline
-   #:get-address
+   #:get-by-address
    #:a
    #:b
    #:c
