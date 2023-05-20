@@ -36,7 +36,7 @@
    #:make-viz-context
    #:show-join
    #:show-inner-successors
-   
+
    #:game-bounds
    #:make-life
    #:make-hashlife

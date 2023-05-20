@@ -99,17 +99,17 @@
 
 (defun right-pt (pt)
   (make-life-point :x (1+ (pt-x pt))
-                   :y (pt-y pt) 
+                   :y (pt-y pt)
                    :gray (pt-gray pt)))
 
 (defun down-pt (pt)
   (make-life-point :x (pt-x pt)
-                   :y (1+ (pt-y pt)) 
+                   :y (1+ (pt-y pt))
                    :gray (pt-gray pt)))
 
 (defun corner-pt (pt)
   (make-life-point :x (1+ (pt-x pt))
-                   :y (1+ (pt-y pt)) 
+                   :y (1+ (pt-y pt))
                    :gray (pt-gray pt)))
 
 
@@ -495,9 +495,9 @@
                             max-x max-y)
           (loop
             :for pt :in remaining-pts
-            :minimizing (pt-x pt) :into min-x fixnum 
+            :minimizing (pt-x pt) :into min-x fixnum
             :minimizing (pt-y pt) :into min-y fixnum
-            :maximizing (pt-x pt) :into max-x fixnum 
+            :maximizing (pt-x pt) :into max-x fixnum
             :maximizing (pt-y pt) :into max-y fixnum
             :finally (return (values min-x min-y max-x max-y)))
         (declare (type fixnum min-x min-y max-x max-y))
@@ -533,8 +533,8 @@
   "Avoid excessive hash table allocation in baseline-life.")
 
 (defun baseline (ipts times)
-   (loop 
-         :for pts = ipts :then 
+   (loop
+         :for pts = ipts :then
                         (iterate-baseline-life pts)
          :for i :below times
          :finally (return pts)))
