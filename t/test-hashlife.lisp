@@ -30,17 +30,20 @@
 
 
 (defun validate-tree (node)
-  (with-slots (a b c d n k) node
-    (if (> k 0)
-        (and (>= n 0)
-             (<= n (expt 2 (* 2 k)))
-             (= (hl:q-k a) (hl:q-k b) (hl:q-k c) (hl:q-k d))
-             (= n (+ (hl:q-n a) (hl:q-n b) (hl:q-n c) (hl:q-n d)))
-             (validate-tree a)
-             (validate-tree b)
-             (validate-tree c)
-             (validate-tree d))
-        t)))
+  (if (> (q-k node) 0)
+      (and (>= (q-n node) 0)
+           (<= (q-n node) (expt 2 (* 2 (q-k node))))
+           (= (hl:q-k (q-a node)) (hl:q-k (q-b node)) (hl:q-k (q-c node)) (hl:q-k (q-d node)))
+           (= (q-n node)
+              (+ (hl:q-n (q-a node))
+                 (hl:q-n (q-b node))
+                 (hl:q-n (q-c node))
+                 (hl:q-n (q-d node))))
+           (validate-tree (q-a node))
+           (validate-tree (q-b node))
+           (validate-tree (q-c node))
+           (validate-tree (q-d node)))
+      t))
 
 (defun product-tree (pieces)
   (let ((four-peat (loop
@@ -135,7 +138,7 @@
 
 (test all-patterns
   (loop :for fname :in (uiop:directory-files "~/src/hashlife/lifep/" "*.LIF")
-        ;; :for i :below 4
+        :for i :below 4
         :do
            (format t " Verifying ~a~%" fname)
            (verify-baseline (hl::read-game-file fname) 64)))

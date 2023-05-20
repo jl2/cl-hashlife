@@ -33,8 +33,8 @@
   (b nil :type maybe-node)
   (c nil :type maybe-node)
   (d nil :type maybe-node)
-  (n nil :type fixnum)
-  (hash nil :type fixnum))
+  (n 0 :type fixnum)
+  (hash 0 :type integer))
 
 (defun get-by-address (node address)
   "Return a quadtree node using a string of the form \"abbcdd\" to index into the string."
@@ -58,7 +58,7 @@
 
 (defun pt (x y &optional (gray 1))
   (declare (type fixnum x y)
-           (type (or fixnum qtnode) gray))
+           (type (or rational fixnum qtnode) gray))
   (make-life-point :x x
                    :y y
                    :gray gray))
@@ -174,6 +174,14 @@
                         (setf cur-count 0)
                         (advance-live-cells (max 1 old-count))))))))
 
+(defun game-bounds (pts)
+  (loop :for pt :in pts
+        :minimizing (pt-x pt) :into min-x
+        :minimizing (pt-y pt) :into min-y
+        :maximizing (pt-x pt) :into max-x
+        :maximizing (pt-y pt) :into max-y
+        :finally (return (values min-x min-y max-x max-y))))
+
 (defun write-rle-stream (stream pts comment)
   (declare (ignorable stream pts comment))
   (format stream "# ~a~%" comment)
@@ -261,7 +269,7 @@
   ;;                (format stream "~%")
   ;;                (setf cur-line-len 0))
   ;;              (format stream "~a" new-data)
-;;  (incf cur-line-len (length new-data))
+  ;;  (incf cur-line-len (length new-data))
   )
 
         ;; :for state-change = t :then (or (/= prev-y cur-y)
@@ -427,8 +435,8 @@
                                 n
                                 &optional (stream t) (level 0))
   (loop
-    :for current = node :then (advance node i)
-    :for i :below n
+    :for i :to n
+    :for current = (advance node i)
     :do
        (show-life current stream level)
     :finally (return current)))
@@ -444,7 +452,7 @@
   (loop
     :for current = node
       :then (iterate-baseline-life current)
-    :for i :below n
+    :for i :to n
     :do
        (show-life current stream level)
     :finally (return current)))

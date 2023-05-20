@@ -37,7 +37,7 @@
    #:show-join
    #:show-inner-successors
    
-   
+   #:game-bounds
    #:make-life
    #:make-hashlife
    #:baseline-advance
@@ -64,6 +64,12 @@
    #:iterate-baseline-life
 
    #:pt
+   #:make-pt
+   #:pt-gray
+   #:pt-x
+   #:pt-y
+   #:pt-=
+   #:pt-+
 
    ;; Hashlife functions translated from this Python:
    ;; https://github.com/johnhw/hashlife

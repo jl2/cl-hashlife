@@ -16,7 +16,7 @@
 
 (in-package :cl-hashlife)
 
-(declaim (optimize (speed 1) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
+(declaim (optimize (speed 1) (space 0) (safety 3) (debug 3) (compilation-speed 0)))
 (defun qtnode-hash-func (val)
   (sxhash (q-hash val)))
 ;;(sb-ext:define-hash-table-test qtnode-hash qtnode-hash-func)
@@ -454,11 +454,7 @@ expansion of n to find the correct successors."
   (when (= 0 n)
     (return-from advance node))
   (let* ((bit-count (1+ (ceiling (log n 2))))
-         (new-node (loop
-                     :for new-node = (center node)
-                       :then (center new-node)
-                     :for k :below bit-count
-                     :finally (return new-node))))
+         (new-node (center node bit-count)))
     (when (null new-node)
       (format t "Warning: new-node is null!~%"))
 
@@ -468,10 +464,12 @@ expansion of n to find the correct successors."
     ;;       :finally (return nod))
 
     (loop
-      :for k :from 0 :to (1+ bit-count)
+      :for k :from 0 :to bit-count
       :for bit = (logbitp k n)
       :for j = (- bit-count k 1)
-      :for next-node = new-node
+      :for next-node = (if bit
+                           (successor new-node j)
+                           new-node)
         :then
         (if bit
             (successor next-node j)

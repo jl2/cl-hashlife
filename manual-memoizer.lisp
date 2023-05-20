@@ -26,53 +26,46 @@
   (call-count 0 :type fixnum)
   (enabled nil :type (or t nil)))
 
+(declaim (inline mm-get mm-reset mm-enable mm-disable mm-add mm-hash))
+
 (defun mm-hash-table-size (mm)
   (hash-table-count (mm-hash-table mm)))
 
 (defun mm-get (mm &rest params)
-  (with-slots (hash-table hash-function enabled call-count hit-count miss-count) mm
-    (incf call-count)
-    (cond
-      (enabled
-       (multiple-value-bind (val foundp)
-           (gethash (apply hash-function params) hash-table nil)
-         (if foundp
-             (incf hit-count)
-             (incf miss-count))
-         (values val foundp)))
+  (incf (mm-call-count mm))
+  (cond
+    ((mm-enabled mm)
+     (multiple-value-bind (val foundp)
+         (gethash (apply (mm-hash-function mm) params) (mm-hash-table mm) nil)
+       (if foundp
+           (incf (mm-hit-count mm))
+           (incf (mm-miss-count mm)))
+       (values val foundp)))
 
-      ((not enabled)
-       (values nil nil)))))
+    (t
+     (values nil nil))))
 
 (defun mm-reset (mm)
-  (with-slots (hash-table call-count hit-count miss-count) mm
-    (clrhash hash-table)
-    (setf hit-count 0
-          miss-count 0
-          call-count 0)))
+  (clrhash (mm-hash-table mm))
+  (setf (mm-hit-count mm) 0
+        (mm-miss-count mm) 0
+        (mm-call-count mm) 0))
 
 (defun mm-enable (mm)
-  (with-slots (enabled) mm
-    (setf enabled t)))
+  (setf (mm-enabled mm) t))
 
 (defun mm-disable (mm)
-  (with-slots (enabled) mm
-    (setf enabled nil)))
+  (setf (mm-enabled mm) nil))
 
 (defun mm-add (mm params value)
-  (with-slots (hash-table
-               hash-function
-               miss-count
-               enabled)
-      mm
-    (cond
-      (enabled
-       (let ((hash-value (apply hash-function params)))
-         (setf (gethash hash-value hash-table)
-               value)
-         (gethash hash-value hash-table)))
-      ((not enabled)
-       value))))
+  (cond
+    ((mm-enabled mm)
+     (let ((hash-value (apply (mm-hash-function mm) params)))
+       (setf (gethash hash-value (mm-hash-table mm))
+             value)
+       (gethash hash-value (mm-hash-table mm))))
+    (t
+     value)))
 
 (defun mm-hash (mm &rest params)
   (apply (mm-hash-function mm) params))
