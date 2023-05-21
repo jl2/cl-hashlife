@@ -567,6 +567,55 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
                   :min-y min-y :max-y max-y
                   :level level)))))))
 
+
+(declaim (inline for-each-cell))
+(defun for-each-cell (node level function x y)
+  "Turn a quadtree into a list of (x, y, gray) triples in
+the rectangle (x,y) -> (lower-bound - upper-bound)"
+  ;; Null or no cells on means skip over this whole quadtree
+  (when (or (null node)
+            (= 0 (q-n node)))
+    (return-from for-each-cell nil))
+
+  (let* ((size (expt 2 (q-k node)))
+         (offset (ash size -1)))
+    (cond
+      ;; Collect cells at this zoom level
+      ((= (q-k node) level)
+
+       ;; Scale quadtree to match scale of level 0
+       (funcall function
+                (ash x (- level))
+                (ash y (- level))
+                (/ (q-n node)
+                   (* size size))))
+
+      ;; Otherwise try expanding the children
+      (t
+       (for-each-cell (q-a node) level function x y)
+       (for-each-cell (q-b node) level function (+ x offset) y)
+       (for-each-cell (q-c node) level function x (+ y offset))
+       (for-each-cell (q-d node) level function (+ x offset) (+ y offset))))))
+
+(defun find-bounds (node level)
+  "Turn a quadtree into a list of (x, y, gray) triples in
+the rectangle (x,y) -> (lower-bound - upper-bound)"
+  ;; Null or no cells on means skip over this whole quadtree
+  (let ((min-x most-positive-fixnum)
+        (max-x most-negative-fixnum)
+        (min-y most-positive-fixnum)
+        (max-y most-negative-fixnum))
+    (flet ((update-stats (x y g)
+             (declare (ignorable g))
+             (setf min-x (min min-x x))
+             (setf min-y (min min-y y))
+             (setf max-x (max max-x x))
+             (setf max-y (max max-y y))))
+      (for-each-cell node level
+                     #'update-stats
+                     0 0)
+      (values min-x min-y max-x max-y))))
+
 (defun align (pts)
   (let* ((min-pt (loop
                    :for pt :in pts

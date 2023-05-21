@@ -88,6 +88,8 @@
    #:n
    #:construct
    #:expand
+   #:for-each-cell
+   #:find-bounds
    #:successor
    #:qtnode
    #:pad
