@@ -23,8 +23,6 @@
 
 (in-package :cl-hashlife.test.hashlife)
 
-(declaim (optimize (debug 3) (speed 3) (space 3) (safety 3)))
-
 (def-suite :cl-hashlife-hashlife)
 (in-suite :cl-hashlife-hashlife)
 

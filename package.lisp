@@ -42,6 +42,8 @@
    #:make-hashlife
    #:baseline-advance
 
+   #:node-size
+
    ;; Look for game file in game-files directory
    ;; of cl-hashlife package directory and guess
    ;; file type by extension
@@ -63,7 +65,8 @@
    ;; O(n) life using lists of (x . y) coordinates
    #:iterate-baseline-life
 
-   #:pt
+   #:2d-pt
+   #:3d-pt
    #:make-pt
    #:pt-gray
    #:pt-x
@@ -134,4 +137,5 @@
    #:mm-hash-table-size
    #:mm-hash-function
    #:mm-stats
+   #:mm-reset-all
    ))

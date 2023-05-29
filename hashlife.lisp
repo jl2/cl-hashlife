@@ -16,7 +16,6 @@
 
 (in-package :cl-hashlife)
 
-(declaim (optimize (speed 1) (space 0) (safety 3) (debug 3) (compilation-speed 0)))
 (defun qtnode-hash-func (val)
   (sxhash (q-hash val)))
 ;;(sb-ext:define-hash-table-test qtnode-hash qtnode-hash-func)
@@ -92,6 +91,12 @@
                                                                                       (* 100000 (q-hash node))
                                                                                       j))
                                                      :enabled t))
+
+(defun mm-reset-all ()
+  (mm-reset *join-memo*)
+  (mm-reset *successor-memo*)
+  (mm-reset *zero-memo*))
+
 (defparameter *on* (make-qtnode :k 0 :n 1 :hash 1)
   "Base level binary node 1")
 
@@ -313,7 +318,7 @@ where j<= k-2, caching the result."
                                     c7 c8 c9)
                   (inner-successors node j)
                 ;;(break)
-                (if (< j (- (q-k node) 2) )
+                (if (< j (- (q-k node) 2))
                     (q-join
                      (q-join (q-d c1) (q-c c2)
                              (q-b c4) (q-a c5))
@@ -354,13 +359,13 @@ where j<= k-2, caching the result."
                    :for pt :in pts
                    :minimizing (pt-x pt) :into min-x
                    :minimizing (pt-y pt) :into min-y
-                   :finally (return (pt min-x min-y *on*))))
-         (pattern (mapcar
-                   (lambda (pt)
-                     (pt (- (pt-x pt) (pt-x min-pt))
-                         (- (pt-y pt) (pt-y min-pt))
-                         *on*))
-                   pts)))
+                   :finally (return (2d-pt min-x min-y *on*))))
+         (pattern (alexandria:shuffle (mapcar
+                                       (lambda (pt)
+                                         (2d-pt (- (pt-x pt) (pt-x min-pt))
+                                             (- (pt-y pt) (pt-y min-pt))
+                                             *on*))
+                                       pts))))
     (pad
      (loop
        :while (/= 1 (length pattern))
@@ -391,7 +396,7 @@ where j<= k-2, caching the result."
                             pattern
                             :test #'pt-=)
 
-             :collecting (pt (ash (pt-x ept) -1)
+             :collecting (2d-pt (ash (pt-x ept) -1)
                              (ash (pt-y ept) -1)
                              (q-join (if a
                                          (pt-gray a)
@@ -532,7 +537,7 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
        ;; Scale quadtree to match scale of level 0
        (let ((reduction (- level)))
          (list
-          (pt (ash x reduction)
+          (2d-pt (ash x reduction)
               (ash y reduction)
               (/ (q-n node)
                  (* size size))))))
@@ -568,7 +573,6 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
                   :level level)))))))
 
 
-(declaim (inline for-each-cell))
 (defun for-each-cell (node level function x y)
   "Turn a quadtree into a list of (x, y, gray) triples in
 the rectangle (x,y) -> (lower-bound - upper-bound)"
@@ -621,7 +625,7 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
                    :for pt :in pts
                    :minimizing (pt-x pt) :into min-x
                    :minimizing (pt-y pt) :into min-y
-                   :finally (return (pt min-x min-y *on*)))))
+                   :finally (return (2d-pt min-x min-y *on*)))))
     (sort (mapcar
            (lambda (pt)
              (hl::pt (- (pt-x pt) (pt-x min-pt))

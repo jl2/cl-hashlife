@@ -36,6 +36,8 @@
   (n 0 :type fixnum)
   (hash 0 :type integer))
 
+(defun node-size (node)
+  (ash 1 (q-k node)))
 (defun get-by-address (node address)
   "Return a quadtree node using a string of the form \"abbcdd\" to index into the string."
   (loop
@@ -53,48 +55,67 @@
 (defstruct (life-point (:conc-name pt-) )
   (x 0 :type fixnum)
   (y 0 :type fixnum)
+  (z 0 :type fixnum)
   (gray 0 :type (or fixnum rational qtnode)))
 
 
-(defun pt (x y &optional (gray 1))
+(defun 2d-pt (x y &optional (gray 1))
   (declare (type fixnum x y)
            (type (or rational fixnum qtnode) gray))
   (make-life-point :x x
                    :y y
+                   :z 0
+                   :gray gray))
+
+(defun 3d-pt (x y z &optional (gray 1))
+  (declare (type fixnum x y z)
+           (type (or rational fixnum qtnode) gray))
+  (make-life-point :x x
+                   :y y
+                   :z z
                    :gray gray))
 
 (defun pt-< (a b)
   (declare (type life-point a b))
-  (or (< (pt-y a) (pt-y b))
-      (if (= (pt-y a) (pt-y b))
-          (< (pt-x a) (pt-x b))
+  (or (< (pt-z a) (pt-z b))
+      (if (= (pt-z a) (pt-z b))
+          (or  (< (pt-y a) (pt-y b))
+               (if (= (pt-y a) (pt-y b))
+                   (< (pt-z a) (pt-z b))
+                   nil))
           nil)))
 
 (defun pt-in-box (pt lower upper)
   (declare (type life-point pt lower upper))
-  (and (<  (pt-x pt) (pt-x upper))
-       (<  (pt-y pt) (pt-y upper))
+  (and (< (pt-x pt) (pt-x upper))
+       (< (pt-y pt) (pt-y upper))
+       (< (pt-z pt) (pt-z upper))
        (> (pt-x pt) (pt-x lower))
-       (> (pt-y pt) (pt-y lower))))
+       (> (pt-y pt) (pt-y lower))
+       (> (pt-z pt) (pt-z lower))))
 
 (defun pt-= (a b)
   (declare (type life-point a b))
   (and (= (pt-x a) (pt-x b))
-       (= (pt-y a) (pt-y b))))
+       (= (pt-y a) (pt-y b))
+       (= (pt-z a) (pt-z b))))
 
 (defun pt-+ (a b)
   (make-life-point :x (+ (pt-x a) (pt-x b))
                    :y (+ (pt-y a) (pt-y b))
+                   :z (+ (pt-z a) (pt-z b))
                    :gray (pt-gray a)))
 
 (defun pt-- (a b)
   (make-life-point :x (- (pt-x a) (pt-x b))
                    :y (- (pt-y a) (pt-y b))
+                   :z (- (pt-z a) (pt-z b))
                    :gray (pt-gray a)))
 
 (defun even-pt (pt)
   (make-life-point :x (- (pt-x pt) (logand (pt-x pt) 1))
                    :y (- (pt-y pt) (logand (pt-y pt) 1))
+                   :z (- (pt-z pt) (logand (pt-z pt) 1))
                    :gray (pt-gray pt)))
 
 (defun right-pt (pt)
@@ -141,7 +162,7 @@
              ;; Collect count live cells and advance by count, minding x-size and y-size
              (advance-live-cells (count)
                (loop :for i :below count
-                     :collecting (pt cur-x cur-y)
+                     :collecting (2d-pt cur-x cur-y)
                      :do (advance-by 1))))
       (loop
         :for line = (read-line stream nil nil)
@@ -290,7 +311,7 @@
       :for x = (read stream nil nil)
       :for y = (read stream nil nil)
       :while (and x y)
-      :collect (pt x y) :into pts
+      :collect (2d-pt x y) :into pts
       :minimizing x :into min-x
       :minimizing y :into min-y
       :maximizing x :into max-x
@@ -336,7 +357,7 @@
             :for cell :across line
             :for this-x :from off-x
             :when (char= cell #\*)
-              :collect (pt this-x this-y))
+              :collect (2d-pt this-x this-y))
         (incf this-y))
     ))
 
@@ -354,7 +375,7 @@
           :for next-char :across line
           :for x :from 0
           :when (or (eq next-char #\*) (eq next-char #\O))
-            :collect (pt x y))))
+            :collect (2d-pt x y))))
 
 (defun write-cells-stream (stream pts &optional (comment ""))
   (format stream "! ~a~%" comment)
@@ -369,7 +390,7 @@
       (loop
         :for y :from min-y :to max-y :do
           (loop :for x :from min-x :to max-x
-                :for elem = (pt x y)
+                :for elem = (2d-pt x y)
                 :do
                    (cond
                      ((find elem pts :test #'pt-=)
@@ -510,7 +531,7 @@
              (loop
                :for x fixnum :from (normalize min-x) :to (normalize max-x)
                :for real-x fixnum :from min-x :to max-x
-               :for elem = (pt real-x real-y)
+               :for elem = (2d-pt real-x real-y)
                :do
                   (if-let ((it (find elem remaining-pts :test #'pt-=)))
                     (progn
@@ -556,7 +577,7 @@ the next generation."
               (loop
                 :for b :in '(-1 0 1)
                 :do
-                   (incf (gethash (pt (+ (pt-x pt) a)
+                   (incf (gethash (2d-pt (+ (pt-x pt) a)
                                       (+ (pt-y pt) b))
                                   counter
                                   0)))))
