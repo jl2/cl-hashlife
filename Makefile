@@ -3,7 +3,7 @@ cl-hashlife: manifest.txt *.lisp *.asd
 
 
 manifest.txt: *.asd
-	sbcl --no-userinit --no-sysinit --non-interactive --load ~/quicklisp/setup.lisp --eval '(ql:quickload :alexandria)'  --eval '(ql:write-asdf-manifest-file "~/src/lisp/cl-hashlife/manifest.txt")'
+	sbcl --no-userinit --no-sysinit --non-interactive --load ~/quicklisp/setup.lisp --eval '(ql:quickload :alexandria)'  --eval '(ql:write-asdf-manifest-file "~/lisp/cl-hashlife/manifest.txt")'
 
 
 clean:
