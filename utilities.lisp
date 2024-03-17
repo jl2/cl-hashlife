@@ -37,9 +37,11 @@
   (hash 0 :type integer))
 
 (defun node-size (node)
+  "Width/height in cells of a Quadtree node."
   (ash 1 (q-k node)))
+
 (defun get-by-address (node address)
-  "Return a quadtree node using a string of the form \"abbcdd\" to index into the string."
+  "Index into quadtree node using a string of the form \"abbcdd\"."
   (loop
     :for next-node = node
       :then (slot-value next-node
@@ -50,9 +52,23 @@
     :for addr :across address
     :finally
        (return next-node)))
-(declaim (inline make-life-point pt pt-< pt-+ pt-- pt-= even-pt right-pt corner-pt pt-x pt-y pt-in-box p))
+
+(declaim (inline make-life-point
+                 pt
+                 pt-<
+                 pt-+
+                 pt--
+                 pt-=
+                 even-pt
+                 right-pt
+                 corner-pt
+                 pt-x
+                 pt-y
+                 pt-in-box
+                 p))
 
 (defstruct (life-point (:conc-name pt-) )
+  "A game of life cell."
   (x 0 :type fixnum)
   (y 0 :type fixnum)
   (z 0 :type fixnum)
@@ -60,6 +76,7 @@
 
 
 (defun 2d-pt (x y &optional (gray 1))
+  "Convenience function for creating a 2d point."
   (declare (type fixnum x y)
            (type (or rational fixnum qtnode) gray))
   (make-life-point :x x
@@ -68,6 +85,7 @@
                    :gray gray))
 
 (defun 3d-pt (x y z &optional (gray 1))
+  "Convenience function for creating a 3d point."
   (declare (type fixnum x y z)
            (type (or rational fixnum qtnode) gray))
   (make-life-point :x x
@@ -76,6 +94,7 @@
                    :gray gray))
 
 (defun pt-< (a b)
+  "Determine if point a is 'less' than b - if"
   (declare (type life-point a b))
   (or (< (pt-z a) (pt-z b))
       (if (= (pt-z a) (pt-z b))
@@ -86,6 +105,7 @@
           nil)))
 
 (defun pt-in-box (pt lower upper)
+  "Determine if pt is in the bounding points lower and upper"
   (declare (type life-point pt lower upper))
   (and (< (pt-x pt) (pt-x upper))
        (< (pt-y pt) (pt-y upper))
@@ -95,46 +115,54 @@
        (> (pt-z pt) (pt-z lower))))
 
 (defun pt-= (a b)
+  "Determine if a and b are equal."
   (declare (type life-point a b))
   (and (= (pt-x a) (pt-x b))
        (= (pt-y a) (pt-y b))
        (= (pt-z a) (pt-z b))))
 
 (defun pt-+ (a b)
+  "Add a to b."
   (make-life-point :x (+ (pt-x a) (pt-x b))
                    :y (+ (pt-y a) (pt-y b))
                    :z (+ (pt-z a) (pt-z b))
                    :gray (pt-gray a)))
 
 (defun pt-- (a b)
+  "Subract b from a."
   (make-life-point :x (- (pt-x a) (pt-x b))
                    :y (- (pt-y a) (pt-y b))
                    :z (- (pt-z a) (pt-z b))
                    :gray (pt-gray a)))
 
 (defun even-pt (pt)
+  "Return the point on even coordinates"
   (make-life-point :x (- (pt-x pt) (logand (pt-x pt) 1))
                    :y (- (pt-y pt) (logand (pt-y pt) 1))
                    :z (- (pt-z pt) (logand (pt-z pt) 1))
                    :gray (pt-gray pt)))
 
 (defun right-pt (pt)
+  "Return the point coordinate right of pt."
   (make-life-point :x (1+ (pt-x pt))
                    :y (pt-y pt)
                    :gray (pt-gray pt)))
 
 (defun down-pt (pt)
+  "Return the point coordinate below pt."
   (make-life-point :x (pt-x pt)
                    :y (1+ (pt-y pt))
                    :gray (pt-gray pt)))
 
 (defun corner-pt (pt)
+  "Return the point coordinate down and right of this one.  Equivalent to (right-pt (down-pt pt))."
   (make-life-point :x (1+ (pt-x pt))
                    :y (1+ (pt-y pt))
                    :gray (pt-gray pt)))
 
 
 (defun read-rle-stream (stream)
+  "Read an RLE life stream and return a list of coordinates for the 'live' cells."
   (let* ((header (loop ;; Skip beginning comment lines and find the x and y size line
                        :for line = (read-line stream nil nil)
                        :while (and line
@@ -196,6 +224,7 @@
                         (advance-live-cells (max 1 old-count))))))))
 
 (defun game-bounds (pts)
+  "Find the bounding box (minx, miny, maxx, maxy) coordinates of a list of points"
   (loop :for pt :in pts
         :minimizing (pt-x pt) :into min-x
         :minimizing (pt-y pt) :into min-y
@@ -204,8 +233,10 @@
         :finally (return (values min-x min-y max-x max-y))))
 
 (defun write-rle-stream (stream pts comment)
+  "Not implemented"
   (declare (ignorable stream pts comment))
   (format stream "# ~a~%" comment)
+  (error "Not implemented")
   ;; (multiple-value-bind (min-x min-y max-x max-y) (loop :for (x . y) :in pts
   ;;                                                      :minimizing x :into min-x
   ;;                                                      :minimizing y :into min-y
@@ -305,31 +336,35 @@
         ;;                (t
         ;;                 (format stream "~a" new-update)))
         ;;         (incf cur-line-len (length new-update)))))))
+
 (defun read-life-1.06-stream (stream)
+  "Read a life 1.06 stream to a list of points."
   (loop
-      :with header = (read-line stream nil nil)
-      :for x = (read stream nil nil)
-      :for y = (read stream nil nil)
-      :while (and x y)
-      :collect (2d-pt x y) :into pts
-      :minimizing x :into min-x
-      :minimizing y :into min-y
-      :maximizing x :into max-x
-      :maximizing y :into max-y
-      :finally
-         (return
-           (let* ((rval (stable-sort pts #'pt-<)))
-             (values rval
-                     min-x min-y
-                     max-x max-y)))))
+    :with header = (read-line stream nil nil)
+    :for x = (read stream nil nil)
+    :for y = (read stream nil nil)
+    :while (and x y)
+    :collect (2d-pt x y) :into pts
+    :minimizing x :into min-x
+    :minimizing y :into min-y
+    :maximizing x :into max-x
+    :maximizing y :into max-y
+    :finally
+       (return
+         (let* ((rval (stable-sort pts #'pt-<)))
+           (values rval
+                   min-x min-y
+                   max-x max-y)))))
 
 (defun write-life-1.06-stream (stream pts comment)
+  "Write a life 1.06 format file to stream."
   (format stream "# ~a~%" comment)
   (loop :for pt :in (sort (copy-list pts) #'pt-<) :do
     (format stream "~a ~a~%" (pt-x pt) (pt-y pt)))
   pts)
 
 (defun read-life-1.05-stream (stream)
+  "Read a life 1.05 stream to a list of points."
   (loop
     :for line-num :from 0
     :with off-x = 0
@@ -362,11 +397,12 @@
     ))
 
 (defun read-cells-stream (stream)
+  "Read a cells formatted file from stream to a list of points."
   (loop :for line = (loop ;; Skip beginning comment lines
-                        :for line = (read-line stream nil nil)
-                        :while (and line
-                                    (eq #\! (aref line 0)))
-                        :finally (return line))
+                          :for line = (read-line stream nil nil)
+                          :while (and line
+                                      (eq #\! (aref line 0)))
+                          :finally (return line))
           :then (read-line stream nil nil)
         :while line
         :for y :from 0
@@ -378,14 +414,16 @@
             :collect (2d-pt x y))))
 
 (defun write-cells-stream (stream pts &optional (comment ""))
-  (format stream "! ~a~%" comment)
-  (multiple-value-bind (min-x min-y max-x max-y) (loop :for pt :in pts
-                                                       :minimizing (pt-x pt) :into min-x
-                                                       :maximizing (pt-x pt) :into max-x
+  "Write a cells formatted file to stream."
 
-                                                       :minimizing (pt-y pt) :into min-y
-                                                       :maximizing (pt-y pt) :into max-y
-                                                       :finally (return (values min-x min-y max-x max-y)))
+  (format stream "! ~a~%" comment)
+  (multiple-value-bind (min-x min-y max-x max-y) (game-bounds pts)
+    ;; (loop :for pt :in pts
+    ;; :minimizing (pt-x pt) :into min-x
+    ;; :maximizing (pt-x pt) :into max-x
+    ;; :minimizing (pt-y pt) :into min-y
+    ;; :maximizing (pt-y pt) :into max-y
+    ;; :finally (return (values min-x min-y max-x max-y)))
     (let ((pts (sort (copy-list pts) #'pt-<)))
       (loop
         :for y :from min-y :to max-y :do
@@ -400,22 +438,32 @@
           (format stream "~%"))))
   pts)
 
+
 (defun find-game-file (fname)
+  "Resolve a game file name.  If fname is a path or (probe-file fname), then return it.
+Otherwise look for a file named fname in each of the *game-file-dirs*."
   (ctypecase fname
     (string
      (if (probe-file fname)
+         ;; It's a specific file, so return it.
          fname
+
+         ;; Not a specific file, so search in *game-file-dirs*
          (loop
            :for path :in *game-file-dirs*
            :do
               (when-let (the-file (probe-file (merge-pathnames fname path)))
                 (return-from find-game-file (merge-pathnames fname path)))
-           :finally (error "Could not find ~a" fname))))
+
+
+           :finally (error "Could not find ~a" fname)))) ;; Doesn't exist, so error out.
     (pathname
+     ;; It's a path, so return it.
      (probe-file fname))))
 
 
 (defun find-reader (path)
+  "Find a reader function for a specific filename."
   (let ((readers `(("life" . ,#'read-life-1.06-stream)
                    ("lif" . ,#'read-life-1.05-stream)
                    ("cells" . ,#'read-cells-stream)
@@ -423,18 +471,26 @@
     (assoc-value readers
                  (string-downcase (pathname-type path))
                  :test #'string= )))
+
 (defun make-life (name-or-path)
+  "Create a life game from a file name or path.
+Searches *game-file-dirs*, so full paths can be left off."
   (read-game-file name-or-path))
 
 (defun make-hashlife (name-or-path)
+  "Construct a Hashlife quadtree node from a file name or path.
+Searches *game-file-dirs*, so full paths can be left off.
+Like `make-life`, but constructs a Hashlife quadtree."
   (hl:construct (read-game-file name-or-path)))
 
 (defun read-game-file (file-name-or-path)
+  "Resolves file-name-or-path and reads the file using the correct stream reader."
   (let ((path (find-game-file file-name-or-path)))
     (with-open-file (stream path)
       (funcall (find-reader path) stream))))
 
 (defun write-game-file (pts file-name &optional (comment "Written by cl-hashlife"))
+  "Writes a .life or .cells file from pts"
   (cond
     ((str:ends-with? ".life" file-name)
      (with-open-file (stream (merge-pathnames (car *game-file-dirs*) file-name)
@@ -448,6 +504,7 @@
                              :if-exists :supersede
                              :external-format :utf8)
        (write-cells-stream stream pts comment)))))
+
 
 (defgeneric show-life-iteration (node n &optional stream level)
   (:documentation "Pretty print a life game iteration to stream."))
@@ -499,7 +556,7 @@
 
 (defun show-life-list (stream pts
                        &optional (level 0))
-
+  "Write a life cell pattern to stream."
   (declare (type (or  stream t) stream)
            (type  list pts)
            (type  fixnum level))
@@ -512,15 +569,7 @@
                                #'pt-<)))
       (declare (type fixnum cnt)
                (type list remaining-pts))
-      (multiple-value-bind (min-x min-y
-                            max-x max-y)
-          (loop
-            :for pt :in remaining-pts
-            :minimizing (pt-x pt) :into min-x fixnum
-            :minimizing (pt-y pt) :into min-y fixnum
-            :maximizing (pt-x pt) :into max-x fixnum
-            :maximizing (pt-y pt) :into max-y fixnum
-            :finally (return (values min-x min-y max-x max-y)))
+      (multiple-value-bind (min-x min-y max-x max-y) (game-bounds remaining-pts)
         (declare (type fixnum min-x min-y max-x max-y))
         (loop
           :for y fixnum :from (normalize min-y)
@@ -593,6 +642,7 @@ the next generation."
 
 (defun baseline-advance (pts
                          times)
+  "Advance using the baseline life algorithm a certain number of times."
   (loop
     :for game = pts :then (iterate-baseline-life game)
     :for i :below times
@@ -603,6 +653,7 @@ the next generation."
                                            (directory (car *game-file-dirs*))
                                            (filter uiop/pathname:*wild-file-for-directory*)
                                            (size-limit-in-bytes (* 100 1024)))
+  ""
   (loop :for file-name :in (uiop:directory-files directory filter)
         :for fname = (concatenate 'string
                                   (pathname-name file-name)
@@ -610,7 +661,7 @@ the next generation."
                                   (pathname-type file-name))
         :for fsize = (with-open-file (stream file-name) (file-length stream))
         :for life = (when (< fsize size-limit-in-bytes)
-                        (make-life fname))
+                      (make-life fname))
         :when life
           :do
              (format t "~a (~a):~%" file-name fname)
