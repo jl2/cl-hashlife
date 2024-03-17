@@ -29,17 +29,27 @@
 
    (open-image :initform t :initarg :open-image)
 
-   (depth :initform 8 :initarg :depth)
-   (expand-level :initform 0 :initarg :expand-level)
-   (level :initform 1 :initarg :level)
-   (lower-left :initform nil :initarg :lower-left)
-   (upper-right :initform nil :initarg :upper-right)
+   (depth :initform 20
+          :initarg :depth)
+   (expand-level :initform 0
+                 :initarg :expand-level)
+   (level :initform 1
+          :initarg :level)
+   (lower-left :initform nil
+               :initarg :lower-left)
+   (upper-right :initform nil
+                :initarg :upper-right)
 
-   (view-min :initform (vec2 0 0) :initarg :view-min)
-   (view-width :initform (vec2 1000 1000) :initarg :view-width)
-   (stroke-width :initform 1 :initarg :stroke-width)
-   (stroke-color :initform (vec4 0.1 0.1 0.1 0.6) :initarg :stroke-color)
-   (fill-color :initform (vec4 0.1 0.8 0.1 1.0))
+   (view-min :initform (vec2 0 0)
+             :initarg :view-min)
+   (view-width :initform (vec2 4000 4000)
+               :initarg :view-width)
+   (stroke-width :initform 0.08
+                 :initarg :stroke-width)
+   (stroke-color :initform (vec4 0.0 0.0 0.0 0.6)
+                 :initarg :stroke-color)
+   (fill-color :initform (vec4 0.1 0.8 0.1 1.0)
+               :initarg :fill-color)
 
    (created-node-files :initform nil)
    (created-files :initform nil)
@@ -48,14 +58,14 @@
 
 (defun make-viz-context (output-directory &key
                                             (base-filename "life")
-                                            (depth 8)
+                                            (depth 20)
                                             (label-nodes nil)
                                             (level 1)
                                             (expand-level 0)
-                                            (stroke-width 1)
+                                            (stroke-width 0.08)
                                             (stroke-color (vec4 0.1 0.1 0.1 0.6))
                                             (view-min (vec2 0 0))
-                                            (view-width (vec2 2000 2000))
+                                            (view-width (vec2 4000 4000))
                                             (lower-left nil)
                                             (upper-right nil)
                                             (ranksep 2.0)
@@ -80,24 +90,24 @@
                  :nodesep nodesep
                  :line-type line-type))
 
-(defun build-filename (context filename type)
-  (with-slots (output-directory output-type) context
+(defun build-filename (viz-context filename type)
+  (with-slots (output-directory) viz-context
     (format nil "~a~a.~a" output-directory filename type)))
 
-(defun build-imagename (context filename)
-  (with-slots (output-directory output-type) context
+(defun build-imagename (viz-context filename)
+  (with-slots (output-directory output-type) viz-context
     (format nil "~a~a.~a" output-directory filename output-type)))
 
-(defun build-qt-imagename (context node)
-  (with-slots (output-directory output-type) context
+(defun build-qt-imagename (viz-context node)
+  (with-slots (output-directory output-type) viz-context
     (format nil
             "~a~a.~a"
             output-directory
             (q-hash node)
             output-type)))
 
-(defun build-animation-imagename (context i)
-  (with-slots (base-filename output-directory output-type) context
+(defun build-animation-imagename (viz-context i)
+  (with-slots (base-filename output-directory output-type) viz-context
     (format nil "~a/~a~8,'0d.~a" output-directory base-filename i output-type)))
 
 (defun maybe-dot-attribute (thing value)
@@ -105,36 +115,41 @@
       (format nil "~a=~s " thing value)
       ""))
 
-(defmacro maybe-start-dot-file ((context name) &body body)
+(defmacro maybe-start-dot-file ((viz-context name) &body body)
   `(unwind-protect
         (progn
           (let ((should-start-and-finish-dot nil))
-            (with-slots (base-filename created-files output-type dot-stream) ,context
+            (with-slots (base-filename created-files output-type dot-stream) ,viz-context
               (setf should-start-and-finish-dot (null dot-stream))
               (when should-start-and-finish-dot
-                (start-dot-file context ,name)))
+                (start-dot-file viz-context ,name)))
             (let ((res (progn
                          ,@body)))
               (when should-start-and-finish-dot
                 (format t "Finishing dot file!~%")
-                (finish-dot-file context))
+                (finish-dot-file viz-context))
               res)))))
 
-(defun dot-node (context node &optional name)
-  (qt-to-svg context node)
-  (with-slots (dot-stream dot-nodes) context
-    (when (not (or (zerop (q-n node)) ))
-      (when (not (find (q-hash node) dot-nodes :test #'=))
-        (format dot-stream
-                "~a [~ashape=custom shapefile=~s ]~%"
-                (q-hash node)
-                (maybe-dot-attribute "label" name)
-                (build-qt-imagename context node))))))
-
-(defun show-qt-transition (context a b label)
-  (with-slots (dot-stream) context
-    (dot-node context a)
-    (dot-node context b)
+(defun dot-node (viz-context node &optional name)
+  (qt-to-svg viz-context node)
+  (with-slots (dot-stream dot-nodes) viz-context
+    (format dot-stream
+              "~a [~ashape=custom shapefile=~s ]~%"
+              (q-hash node)
+              (maybe-dot-attribute "label" name)
+              (build-qt-imagename viz-context node))
+    ;; (when (not (zerop (q-n node)) )
+    ;;   ;;when (not (find (q-hash node) dot-nodes :test #'=))
+    ;;   (format dot-stream
+    ;;           "~a [~ashape=custom shapefile=~s ]~%"
+    ;;           (q-hash node)
+    ;;           (maybe-dot-attribute "label" name)
+    ;;           (build-qt-imagename viz-context node)))))
+    ))
+(defun show-qt-transition (viz-context a b label)
+  (with-slots (dot-stream) viz-context
+    (dot-node viz-context a)
+    (dot-node viz-context b)
     ;;when (and (not (zerop (q-n a))) (not (zerop (q-n b))))
     (format dot-stream
             "~a -> ~a [~a]~%"
@@ -142,9 +157,9 @@
             (q-hash b)
             (maybe-dot-attribute "label" label))))
 
-(defun start-dot-file (context name)
-  (with-slots (base-filename dot-stream line-type ranksep nodesep) context
-    (setf dot-stream (open (build-filename context base-filename "dot")
+(defun start-dot-file (viz-context name)
+  (with-slots (base-filename dot-stream line-type ranksep nodesep) viz-context
+    (setf dot-stream (open (build-filename viz-context base-filename "dot")
                            :direction :output
                            :if-exists :supersede))
     (format dot-stream
@@ -156,10 +171,10 @@
     (format dot-stream
             "nodesep=~f~%" nodesep)))
 
-(defun finish-dot-file (context)
-  (with-slots (base-filename dot-stream output-type created-files) context
-    (let* ((dot-filename (build-filename context base-filename "dot"))
-           (imagename (build-imagename context base-filename))
+(defun finish-dot-file (viz-context)
+  (with-slots (base-filename dot-stream output-type created-files) viz-context
+    (let* ((dot-filename (build-filename viz-context base-filename "dot"))
+           (imagename (build-imagename viz-context base-filename))
            (dot-cmd (format nil
                             "dot -T~a -o~a ~a"
                             output-type
@@ -171,20 +186,20 @@
       (uiop:run-program dot-cmd :force-shell t :output t :error-output t )
       (push imagename created-files))))
 
-(defun start-subgraph (context name bgcolor)
-  (with-slots (dot-stream) context
+(defun start-subgraph (viz-context name bgcolor)
+  (with-slots (dot-stream) viz-context
     (format dot-stream
             "subgraph ~s {~%" name)
     (format dot-stream  "style=filled;~%color=~a;~%" bgcolor)))
 
-(defun end-subgraph (context)
-  (with-slots (dot-stream) context
+(defun end-subgraph (viz-context)
+  (with-slots (dot-stream) viz-context
     (format dot-stream
             "}~%")))
 
 
-(defun to-svg (context filename pts-or-node)
-  (with-slots (lower-left upper-right level expand-level stroke-width view-min view-width created-files) context
+(defun to-svg (viz-context filename pts-or-node)
+  (with-slots (lower-left upper-right level expand-level stroke-width view-min view-width created-files) viz-context
     (let ((remaining-pts
             ;; Sort cells from top left to bottom right
             (sort
@@ -258,14 +273,14 @@
                                                         (- 1 gray)
                                                         (- 1 gray)
                                                         1.0))))))))))))
-(defun qt-to-svg (context node &optional name-override)
+(defun qt-to-svg (viz-context node &optional name-override)
   (with-slots (stroke-width output-directory stroke-color
                view-width view-min depth created-files created-node-files)
-      context
+      viz-context
     (when (not (find (q-hash node)
                      created-node-files))
       (let ((real-filename (if name-override
-                               name-override (build-qt-imagename context node))))
+                               name-override (build-qt-imagename viz-context node))))
         (with-output-to-file (outf real-filename
                                    :if-exists :supersede)
           (push real-filename created-files)
@@ -318,7 +333,7 @@
               (draw-node node 0 0 (vx view-width) 0 (vy view-width)))))))))
 
 
-(defun animate-life (context
+(defun animate-life (viz-context
                      pts-or-node
                      n)
   (loop
@@ -328,11 +343,11 @@
               (list (baseline-advance pts-or-node i))
               (qtnode (advance pts-or-node i)))
     :do
-       (to-svg context
-               (build-animation-imagename context i)
+       (to-svg viz-context
+               (build-animation-imagename viz-context i)
                pts)))
 
-(defun animate-hashlife-qt (context
+(defun animate-hashlife-qt (viz-context
                             start-node
                             n)
   (loop
@@ -340,11 +355,11 @@
     :for node = start-node
       :then (advance node 1)
     :do
-       (qt-to-svg context
+       (qt-to-svg viz-context
                   node
-                  (build-animation-imagename context i))))
+                  (build-animation-imagename viz-context i))))
 
-(defun show-hashlife-successors (context
+(defun show-hashlife-successors (viz-context
                                  start-node
                                  n)
   (loop
@@ -352,15 +367,15 @@
       :then (successor node i)
     :for i :from 0 :below n
     :do
-       (qt-to-svg context
+       (qt-to-svg viz-context
                   node
-                  (build-animation-imagename context i))))
+                  (build-animation-imagename viz-context i))))
 
 
-(defun show-inner-successors (context node j)
+(defun show-inner-successors (viz-context node j)
 
 
-  (maybe-start-dot-file (context "inner successors")
+  (maybe-start-dot-file (viz-context "inner successors")
       (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) node
         (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) m.a
           (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) m.b
@@ -368,62 +383,66 @@
               (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) m.d
                 (let* (
                        ;; Top Row
-                       (j1 (show-join context
+                       (j1 (show-join viz-context
                                       m.a.a m.a.b
                                       m.a.c m.a.d))
-                       (c1 (show-successor context j1 j))
+                       (c1 (show-successor viz-context j1 j))
 
-                       (j2 (show-join context
+
+                       (j2 (show-join viz-context
                                       m.a.b  m.b.a
                                       m.a.d  m.b.c))
-                       (c2 (show-successor context j2 j))
-                       (j3 (show-join context
+                       (c2 (show-successor viz-context j2 j))
+
+                       (j3 (show-join viz-context
                                       m.b.a m.b.b
                                       m.b.c m.b.d))
-                       (c3 (show-successor context j3 j))
+                       (c3 (show-successor viz-context j3 j))
 
                        ;; Middle Row
-                       (j4 (show-join context
+                       (j4 (show-join viz-context
                                       m.a.c  m.a.d
                                       m.c.a  m.c.b))
-                       (c4 (show-successor context j4 j))
-                       (j5 (show-join context
+                       (c4 (show-successor viz-context j4 j))
+
+                       (j5 (show-join viz-context
                                       m.a.d  m.b.c
                                       m.c.b  m.d.a))
-                       (c5 (show-successor context j5 j))
+                       (c5 (show-successor viz-context j5 j))
 
-                       (j6 (show-join context
+
+                       (j6 (show-join viz-context
                                       m.b.c  m.b.d
                                       m.d.a  m.d.b))
-                       (c6 (show-successor context
+                       (c6 (show-successor viz-context
                                            j6
                                            j))
 
                        ;; Bottom row
                        (j7 m.c)
-                       (c7 (show-successor context j7 j))
+                       (c7 (show-successor viz-context j7 j))
 
-                       (j8 (show-join context
+                       (j8 (show-join viz-context
                                       m.c.b m.d.a
                                       m.c.d m.d.c))
-                       (c8 (show-successor context j8 j))
+                       (c8 (show-successor viz-context j8 j))
 
                        (j9 m.d)
-                       (c9 (show-successor context j9 j))
+                       (c9 (show-successor viz-context j9 j))
                        (inner-successors (list c1 c2 c3 c4 c5 c6 c7 c8 c9))
                        (names '("c1" "c2" "c3" "c4" "c5" "c6" "c7" "c8" "c9")))
 
-                  (start-subgraph context "inner-successor" "lightgrey")
-                  (qt-to-svg context node)
-                  (dot-node context node "node")
+                  (start-subgraph viz-context "inner-successor" "lightgrey")
+                  (qt-to-svg viz-context node)
+                  (dot-node viz-context node "node")
                   (loop
                     :for inner-successor :in inner-successors
                     :for name :in names
                     :do
-                       (qt-to-svg context inner-successor)
-                       (dot-node context inner-successor name)
-                       (show-qt-transition context node inner-successor (format nil "inner successor ~a" name)))
-                  (end-subgraph context)
+                       (qt-to-svg viz-context inner-successor)
+                       (dot-node viz-context inner-successor name)
+                       (show-qt-transition viz-context node inner-successor (format nil "inner successor ~a" name)))
+                  (end-subgraph viz-context)
                   (values c1 c2 c3 c4 c5 c6 c7 c8 c9)))))))))
 
 (defun show-life-viz (a b c
@@ -446,21 +465,21 @@ Returns *on* if should be on, *off* otherwise."
         *on*
         *off*)))
 
-(defun show-life-4x4 (context m)
+(defun show-life-4x4 (viz-context m)
   "Return the next generation of a k=2 (i.e. 4x4) cell.
 To terminate the recursion at the base level,
 if we have a k=2 4x4 block,
 we can compute the 2x2 central successor by iterating over all
 the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
   (declare (type qtnode m))
-  (maybe-start-dot-file (context "life-4x4")
+  (maybe-start-dot-file (viz-context "life-4x4")
     (with-slots ((ma a) (mb b) (mc c) (md d)) m
       (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) ma
         (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) mb
           (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) mc
               (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) md
                 (let ((result
-                        (show-join context
+                        (show-join viz-context
                          ;; Copy/pasted from. .(find-file-other-window "~/src/hashlife/hashlife.py" )
                          ;; na = life(m.a.a, m.a.b, m.b.a, m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a)  # AD
                          (show-life-viz  m.a.a  m.a.b  m.b.a
@@ -483,7 +502,7 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                                       m.c.d  m.d.c  m.d.d))))
                   result))))))))
 
-(defun show-join (context a b c d)
+(defun show-join (viz-context a b c d)
   (multiple-value-bind (val found) (mm-get *join-memo* a b c d)
     (cond
       (found
@@ -492,7 +511,7 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
 
        (mm-add *join-memo* (list a b c d)
                (progn
-                 (maybe-start-dot-file (context "show-join")
+                 (maybe-start-dot-file (viz-context "show-join")
                    (let* ((this-k (if (zerop (1+ (q-k a)))
                                       (progn (break) 1)
                                       (1+ (q-k a))))
@@ -507,39 +526,39 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                                                      (q-n c)
                                                      (q-n d))
                                                :hash (compute-hash a b c d))))
-                     (qt-to-svg context a)
-                     (qt-to-svg context b)
-                     (qt-to-svg context c)
-                     (qt-to-svg context d)
-                     (qt-to-svg context result)
-                     (dot-node context a "a")
-                     (dot-node context b "b")
-                     (dot-node context c "c")
-                     (dot-node context d "d")
-                     (dot-node context result "joined")
-                     (show-qt-transition context a result "a")
-                     (show-qt-transition context b result "b")
-                     (show-qt-transition context c result "c")
-                     (show-qt-transition context d result "d")
+                     (qt-to-svg viz-context a)
+                     (qt-to-svg viz-context b)
+                     (qt-to-svg viz-context c)
+                     (qt-to-svg viz-context d)
+                     (qt-to-svg viz-context result)
+                     (dot-node viz-context a "a")
+                     (dot-node viz-context b "b")
+                     (dot-node viz-context c "c")
+                     (dot-node viz-context d "d")
+                     (dot-node viz-context result "joined")
+                     (show-qt-transition viz-context a result "a")
+                     (show-qt-transition viz-context b result "b")
+                     (show-qt-transition viz-context c result "c")
+                     (show-qt-transition viz-context d result "d")
                      result))))))))
 
 
-(defun show-successor (context node j)
+(defun show-successor (viz-context node j)
   (declare (type qtnode node)
            (type (or null integer)  j))
-  (maybe-start-dot-file (context "successor")
-    (qt-to-svg context node)
-    (dot-node context node "node")
+  (maybe-start-dot-file (viz-context "successor")
+    (qt-to-svg viz-context node)
+    (dot-node viz-context node "node")
     (flet ((real-inner-show-successor ()
              (cond
                ((zerop (q-n node))
-                (show-qt-transition context node *off* "successor 0")
+                (show-qt-transition viz-context node *off* "successor 0")
                 (q-a node))
 
                ((= (q-k node) 2)
-                (let ((lf4 (show-life-4x4 context node)))
-                  (qt-to-svg context lf4)
-                  (show-qt-transition context node lf4 "successor life-4x4")
+                (let ((lf4 (show-life-4x4 viz-context node)))
+                  (qt-to-svg viz-context lf4)
+                  (show-qt-transition viz-context node lf4 "successor life-4x4")
                   lf4))
 
                (t
@@ -557,60 +576,60 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
 
                           (let* (
                                  ;; Top Row
-                                 (j1 (show-join context
+                                 (j1 (show-join viz-context
                                                 m.a.a m.a.b
                                                 m.a.c m.a.d))
-                                 (c1 (show-successor context j1 j))
+                                 (c1 (show-successor viz-context j1 j))
 
 
-                                 (j2 (show-join context
+                                 (j2 (show-join viz-context
                                                 m.a.b  m.b.a
                                                 m.a.d  m.b.c))
-                                 (c2 (show-successor context j2 j))
+                                 (c2 (show-successor viz-context j2 j))
 
 
-                                 (j3 (show-join context
+                                 (j3 (show-join viz-context
                                                 m.b.a m.b.b
                                                 m.b.c m.b.d))
-                                 (c3 (show-successor context j3 j))
+                                 (c3 (show-successor viz-context j3 j))
 
 
                                  ;; Middle Row
-                                 (j4 (show-join context
+                                 (j4 (show-join viz-context
                                                 m.a.c  m.a.d
                                                 m.c.a  m.c.b))
-                                 (c4 (show-successor context j4 j))
+                                 (c4 (show-successor viz-context j4 j))
 
 
-                                 (j5 (show-join context
+                                 (j5 (show-join viz-context
                                                 m.a.d  m.b.c
                                                 m.c.b  m.d.a))
-                                 (c5 (show-successor context j5 j))
+                                 (c5 (show-successor viz-context j5 j))
 
 
-                                 (j6 (show-join context
+                                 (j6 (show-join viz-context
                                                 m.b.c  m.b.d
                                                 m.d.a  m.d.b))
-                                 (c6 (show-successor context j6 j))
+                                 (c6 (show-successor viz-context j6 j))
 
                                  ;; Bottom row
 
                                  (j7 m.c)
-                                 (c7 (show-successor context j7 j))
+                                 (c7 (show-successor viz-context j7 j))
 
 
-                                 (j8 (show-join context
+                                 (j8 (show-join viz-context
                                                 m.c.b m.d.a
                                                 m.c.d m.d.c))
-                                 (c8 (show-successor context j8 j))
+                                 (c8 (show-successor viz-context j8 j))
 
 
                                  (j9 m.d)
-                                 (c9 (show-successor context j9 j)))
+                                 (c9 (show-successor viz-context j9 j)))
                             (flet ((i-join (a b c d)
-                                     (show-join context a b c d)))
+                                     (show-join viz-context a b c d)))
                               (cond ((< j (- (q-k node) 2))
-                                     (start-subgraph context "inner-successors" "blue")
+                                     (start-subgraph viz-context "inner-successors" "blue")
                                      (let* ((la (i-join (q-d c1) (q-c c2)
                                                         (q-b c4) (q-a c5)))
                                             (lb (i-join (q-d c2) (q-c c3)
@@ -620,11 +639,11 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                                             (ld (i-join (q-d c5) (q-c c6)
                                                         (q-b c8) (q-a c9)))
                                             (joined (i-join la lb lc ld)))
-                                       (end-subgraph context)
+                                       (end-subgraph viz-context)
                                        joined)
                                      )
                                     (t
-                                     (start-subgraph context "inner2" "red")
+                                     (start-subgraph viz-context "inner2" "red")
                                      (let* ((ta (i-join c1 c2
                                                         c4 c5))
                                             (tb (i-join c2 c3
@@ -633,31 +652,31 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                                                         c7 c8))
                                             (td (i-join c5 c6
                                                         c8 c9))
-                                            (sa (show-successor context ta j))
-                                            (sb (show-successor context tb j))
-                                            (sc (show-successor context tc j))
-                                            (sd (show-successor context td j))
-                                            (result (show-join context sa sb sc sd)))
+                                            (sa (show-successor viz-context ta j))
+                                            (sb (show-successor viz-context tb j))
+                                            (sc (show-successor viz-context tc j))
+                                            (sd (show-successor viz-context td j))
+                                            (result (show-join viz-context sa sb sc sd)))
 
-                                       (qt-to-svg context ta)
-                                       (qt-to-svg context tb)
-                                       (qt-to-svg context tc)
-                                       (qt-to-svg context td)
-                                       (qt-to-svg context sa)
-                                       (qt-to-svg context sb)
-                                       (qt-to-svg context sc)
-                                       (qt-to-svg context sd)
-                                       (show-qt-transition context ta sa "successor a")
-                                       (show-qt-transition context tb sb "successor b")
-                                       (show-qt-transition context tc sc "successor c")
-                                       (show-qt-transition context td sd "successor d")
-                                       (end-subgraph context)
-                                       (show-qt-transition context node result (format nil "successor ~a" j))
+                                       (qt-to-svg viz-context ta)
+                                       (qt-to-svg viz-context tb)
+                                       (qt-to-svg viz-context tc)
+                                       (qt-to-svg viz-context td)
+                                       (qt-to-svg viz-context sa)
+                                       (qt-to-svg viz-context sb)
+                                       (qt-to-svg viz-context sc)
+                                       (qt-to-svg viz-context sd)
+                                       (show-qt-transition viz-context ta sa "successor a")
+                                       (show-qt-transition viz-context tb sb "successor b")
+                                       (show-qt-transition viz-context tc sc "successor c")
+                                       (show-qt-transition viz-context td sd "successor d")
+                                       (end-subgraph viz-context)
+                                       (show-qt-transition viz-context node result (format nil "successor ~a" j))
                                        result))))))))))))))
       (multiple-value-bind (val found) (mm-get *successor-memo* node j)
         (cond
           (found
-           (show-qt-transition context node val (format nil "successor ~a" j))
+           (show-qt-transition viz-context node val (format nil "successor ~a" j))
            val)
 
           ((not found)
@@ -665,10 +684,10 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
              (mm-add *successor-memo*
                      (list node j)
                      it)
-             (show-qt-transition context node it (format nil "successor ~a" j))
+             (show-qt-transition viz-context node it (format nil "successor ~a" j))
              it)))))))
 
-(defun show-advance (context node n)
+(defun show-advance (viz-context node n)
   "Advance node by exactly n generations, using the binary
 expansion of n to find the correct successors."
 
@@ -677,7 +696,7 @@ expansion of n to find the correct successors."
   (when (= 0 n)
     (return-from show-advance node))
 
-  (maybe-start-dot-file (context "advance")
+  (maybe-start-dot-file (viz-context "advance")
     (let* ((bit-count (1+ (ceiling (log n 2))))
            (new-node (loop
                        :for new-node = (center node)
@@ -704,7 +723,7 @@ expansion of n to find the correct successors."
           (if bit
               (successor next-node j)
               next-node)
-        :do (show-qt-transition context
+        :do (show-qt-transition viz-context
                                 prev-node
                                 next-node
                                 (format nil "advance ~a" j))
