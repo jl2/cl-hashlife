@@ -295,7 +295,7 @@
             (svg:default-style outf)
             (labels
                 ((draw-node (node current-depth min-x max-x min-y max-y)
-                   (with-slots (k n a b c d hash) node
+                   (with-slots (k n nw ne sw se hash) node
                      (let* ((node-width (- max-x min-x))
                             (node-height (- max-y min-y))
                             (mid-x (+ min-x
@@ -325,10 +325,10 @@
                                   (not (zerop (q-n node))))
 
                          ;; Recursively draw nodes
-                         (draw-node a (1+ current-depth) min-x mid-x min-y mid-y)
-                         (draw-node b (1+ current-depth) mid-x max-x min-y mid-y)
-                         (draw-node c (1+ current-depth) min-x mid-x mid-y max-y)
-                         (draw-node d (1+ current-depth) mid-x max-x mid-y max-y))))))
+                         (draw-node nw (1+ current-depth) min-x mid-x min-y mid-y)
+                         (draw-node ne (1+ current-depth) mid-x max-x min-y mid-y)
+                         (draw-node sw (1+ current-depth) min-x mid-x mid-y max-y)
+                         (draw-node se (1+ current-depth) mid-x max-x mid-y max-y))))))
 
               (draw-node node 0 0 (vx view-width) 0 (vy view-width)))))))))
 
@@ -502,14 +502,14 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                                       m.c.d  m.d.c  m.d.d))))
                   result))))))))
 
-(defun show-join (viz-context a b c d)
-  (multiple-value-bind (val found) (mm-get *join-memo* a b c d)
+(defun show-join (viz-context nw ne sw se)
+  (multiple-value-bind (val found) (mm-get *join-memo* nw ne sw se)
     (cond
       (found
        val)
       ((not found)
 
-       (mm-add *join-memo* (list a b c d)
+       (mm-add *join-memo* (list nw ne sw se)
                (progn
                  (maybe-start-dot-file (viz-context "show-join")
                    (let* ((this-k (if (zerop (1+ (q-k a)))
@@ -517,29 +517,29 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                                       (1+ (q-k a))))
 
                           (result (make-qtnode :k this-k
-                                               :a a
-                                               :b b
-                                               :c c
-                                               :d d
-                                               :n (+ (q-n a)
-                                                     (q-n b)
-                                                     (q-n c)
-                                                     (q-n d))
-                                               :hash (compute-hash a b c d))))
-                     (qt-to-svg viz-context a)
-                     (qt-to-svg viz-context b)
-                     (qt-to-svg viz-context c)
-                     (qt-to-svg viz-context d)
+                                               :nw nw
+                                               :ne ne
+                                               :sw sw
+                                               :se se
+                                               :n (+ (q-n nw)
+                                                     (q-n ne)
+                                                     (q-n sw)
+                                                     (q-n se))
+                                               :hash (compute-hash nw ne sw se))))
+                     (qt-to-svg viz-context nw)
+                     (qt-to-svg viz-context ne)
+                     (qt-to-svg viz-context sw)
+                     (qt-to-svg viz-context se)
                      (qt-to-svg viz-context result)
-                     (dot-node viz-context a "a")
-                     (dot-node viz-context b "b")
-                     (dot-node viz-context c "c")
-                     (dot-node viz-context d "d")
+                     (dot-node viz-context nw "nw")
+                     (dot-node viz-context ne "ne")
+                     (dot-node viz-context sw "sw")
+                     (dot-node viz-context se "se")
                      (dot-node viz-context result "joined")
-                     (show-qt-transition viz-context a result "a")
-                     (show-qt-transition viz-context b result "b")
-                     (show-qt-transition viz-context c result "c")
-                     (show-qt-transition viz-context d result "d")
+                     (show-qt-transition viz-context nw result "nw")
+                     (show-qt-transition viz-context ne result "ne")
+                     (show-qt-transition viz-context sw result "sw")
+                     (show-qt-transition viz-context se result "se")
                      result))))))))
 
 
@@ -553,7 +553,7 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
              (cond
                ((zerop (q-n node))
                 (show-qt-transition viz-context node *off* "successor 0")
-                (q-a node))
+                (q-nw node))
 
                ((= (q-k node) 2)
                 (let ((lf4 (show-life-4x4 viz-context node)))
@@ -626,18 +626,18 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
 
                                  (j9 m.d)
                                  (c9 (show-successor viz-context j9 j)))
-                            (flet ((i-join (a b c d)
-                                     (show-join viz-context a b c d)))
+                            (flet ((i-join (nw ne sw se)
+                                     (show-join viz-context nw ne sw se)))
                               (cond ((< j (- (q-k node) 2))
                                      (start-subgraph viz-context "inner-successors" "blue")
-                                     (let* ((la (i-join (q-d c1) (q-c c2)
-                                                        (q-b c4) (q-a c5)))
-                                            (lb (i-join (q-d c2) (q-c c3)
-                                                        (q-b c5) (q-a c6)))
-                                            (lc (i-join (q-d c4) (q-c c5)
-                                                        (q-b c7) (q-a c8)))
-                                            (ld (i-join (q-d c5) (q-c c6)
-                                                        (q-b c8) (q-a c9)))
+                                     (let* ((la (i-join (q-se c1) (q-sw c2)
+                                                        (q-ne c4) (q-nw c5)))
+                                            (lb (i-join (q-se c2) (q-sw c3)
+                                                        (q-ne c5) (q-nw c6)))
+                                            (lc (i-join (q-se c4) (q-sw c5)
+                                                        (q-ne c7) (q-nw c8)))
+                                            (ld (i-join (q-se c5) (q-sw c6)
+                                                        (q-ne c8) (q-nw c9)))
                                             (joined (i-join la lb lc ld)))
                                        (end-subgraph viz-context)
                                        joined)

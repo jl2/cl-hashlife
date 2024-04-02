@@ -29,10 +29,10 @@
 (defstruct (qtnode (:conc-name q-))
   "A quad tree node"
   (k 1 :type fixnum)
-  (a nil :type maybe-node)
-  (b nil :type maybe-node)
-  (c nil :type maybe-node)
-  (d nil :type maybe-node)
+  (nw nil :type maybe-node)
+  (ne nil :type maybe-node)
+  (sw nil :type maybe-node)
+  (se nil :type maybe-node)
   (n 0 :type fixnum)
   (hash 0 :type integer))
 
@@ -614,9 +614,25 @@ Like `make-life`, but constructs a Hashlife quadtree."
 Takes a list of (x, y) cells and returns a new set of cells in
 the next generation."
   (declare (dynamic-extent pts))
-  (let ((counter (make-hash-table :test 'equalp :size 100)))
+  (let ((counter (make-hash-table :test 'equalp
+                                  :size 100)))
     (declare (dynamic-extent counter))
     ;; Count neighbors
+    ;; pmap is *much* slower here...
+    ;; basically sequential since it has to lock the hash table,
+    ;; with the added overhead of actually locking it each time
+    ;; (lparallel:pmap nil (lambda (pt)
+    ;;                   (loop
+    ;;        :for a :in '(-1 0 1)
+    ;;        :do
+    ;;           (loop
+    ;;             :for b :in '(-1 0 1)
+    ;;             :do
+    ;;                (incf (gethash (2d-pt (+ (pt-x pt) a)
+    ;;                                   (+ (pt-y pt) b))
+    ;;                               counter
+    ;;                               0)))))
+    ;;                 pts)
     (loop
       :for pt :in pts
       :do
@@ -627,7 +643,7 @@ the next generation."
                 :for b :in '(-1 0 1)
                 :do
                    (incf (gethash (2d-pt (+ (pt-x pt) a)
-                                      (+ (pt-y pt) b))
+                                         (+ (pt-y pt) b))
                                   counter
                                   0)))))
     (loop

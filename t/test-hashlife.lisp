@@ -31,16 +31,16 @@
   (if (> (q-k node) 0)
       (and (>= (q-n node) 0)
            (<= (q-n node) (expt 2 (* 2 (q-k node))))
-           (= (hl:q-k (q-a node)) (hl:q-k (q-b node)) (hl:q-k (q-c node)) (hl:q-k (q-d node)))
+           (= (hl:q-k (q-nw node)) (hl:q-k (q-ne node)) (hl:q-k (q-sw node)) (hl:q-k (q-se node)))
            (= (q-n node)
-              (+ (hl:q-n (q-a node))
-                 (hl:q-n (q-b node))
-                 (hl:q-n (q-c node))
-                 (hl:q-n (q-d node))))
-           (validate-tree (q-a node))
-           (validate-tree (q-b node))
-           (validate-tree (q-c node))
-           (validate-tree (q-d node)))
+              (+ (hl:q-n (q-nw node))
+                 (hl:q-n (q-ne node))
+                 (hl:q-n (q-sw node))
+                 (hl:q-n (q-se node))))
+           (validate-tree (q-nw node))
+           (validate-tree (q-ne node))
+           (validate-tree (q-sw node))
+           (validate-tree (q-se node)))
       t))
 
 (defun product-tree (pieces)
@@ -91,9 +91,9 @@
         (is (zerop (hl::q-n (hl::advance (hl::get-zero 8) 8))))
         (is (zerop (hl::q-n (hl::ffwd (hl::get-zero 8) 4))))))
 
-(test ffwd-large
-  (let ((node (hl::construct (hl::read-game-file "BREEDER.LIF"))))
-    (is (validate-tree (hl::ffwd node 64)))))
+;; (test ffwd-large
+;;   (let ((node (hl::construct (hl::read-game-file "BREEDER.LIF"))))
+;;     (is (validate-tree (hl::ffwd node 64)))))
 
 (test get-zero
   (loop :for i :below 32

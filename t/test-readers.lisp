@@ -28,36 +28,36 @@
 
 (test read-life-1.06
   (is (every #'hl::pt-=
-             (list (hl::pt 0  -1)
-                   (hl::pt 1  0)
-                   (hl::pt -1  1)
-                   (hl::pt 0  1)
-                   (hl::pt 1  1))
+             (list (hl::2d-pt 0  -1)
+                   (hl::2d-pt 1  0)
+                   (hl::2d-pt -1  1)
+                   (hl::2d-pt 0  1)
+                   (hl::2d-pt 1  1))
              (hl:read-game-file "glider.life"))))
 
 (test read-life-1.05
   (is (every #'hl::pt-=
-             (list (hl::pt 0  -1)
-                   (hl::pt 1  0)
-                   (hl::pt -1  1)
-                   (hl::pt 0  1)
-                   (hl::pt 1  1))
+             (list (hl::2d-pt 0  -1)
+                   (hl::2d-pt 1  0)
+                   (hl::2d-pt -1  1)
+                   (hl::2d-pt 0  1)
+                   (hl::2d-pt 1  1))
              (hl:read-game-file "glider.lif"))))
 
 (test read-cells
   (is (every #'hl::pt-=
-             (list (hl::pt 1  0)
-                   (hl::pt 2 1)
-                   (hl::pt 0 2)
-                   (hl::pt 1 2)
-                   (hl::pt 2 2))
+             (list (hl::2d-pt 1  0)
+                   (hl::2d-pt 2 1)
+                   (hl::2d-pt 0 2)
+                   (hl::2d-pt 1 2)
+                   (hl::2d-pt 2 2))
              (hl:read-game-file "glider.cells" ))))
 
 (test read-rle
   (is (every #'hl::pt-=
-             (list (hl::pt 1 0)
-                   (hl::pt 2 1)
-                   (hl::pt 0 2)
-                   (hl::pt 1 2)
-                   (hl::pt 2 2))
+             (list (hl::2d-pt 1 0)
+                   (hl::2d-pt 2 1)
+                   (hl::2d-pt 0 2)
+                   (hl::2d-pt 1 2)
+                   (hl::2d-pt 2 2))
              (hl:read-game-file "glider.rle"))))

@@ -28,11 +28,11 @@
 
 (test write-life-1.06
       (let* ((glider
-               (list (hl::pt -1  1)
-                     (hl::pt 1  0)
-                     (hl::pt 0  -1)
-                     (hl::pt 1  1)
-                     (hl::pt 0  1)))
+               (list (hl::2d-pt -1  1)
+                     (hl::2d-pt 1  0)
+                     (hl::2d-pt 0  -1)
+                     (hl::2d-pt 1  1)
+                     (hl::2d-pt 0  1)))
              (str (with-output-to-string (outs)
                     (hl::write-life-1.06-stream outs glider "test-write-life-1.06"))))
         (is (string= str
@@ -45,11 +45,11 @@
 "))))
 
 (test write-cells
-      (let* ((glider (list (hl::pt -1  1)
-                           (hl::pt 1  0)
-                           (hl::pt 0  -1)
-                           (hl::pt 1  1)
-                           (hl::pt 0  1)))
+      (let* ((glider (list (hl::2d-pt -1  1)
+                           (hl::2d-pt 1  0)
+                           (hl::2d-pt 0  -1)
+                           (hl::2d-pt 1  1)
+                           (hl::2d-pt 0  1)))
              (str (with-output-to-string (outs)
                     (hl::write-cells-stream outs glider "test-write-cells"))))
         (is (string= str

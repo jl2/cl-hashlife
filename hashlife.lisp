@@ -18,41 +18,44 @@
 
 (defun qtnode-hash-func (val)
   (sxhash (q-hash val)))
+
 ;;(sb-ext:define-hash-table-test qtnode-hash qtnode-hash-func)
 
 (defmethod cl:print-object ((node qtnode) stream)
   (declare (type stream stream))
-  (with-slots (k n a b c d hash) node
+  (with-slots (k n nw ne sw se hash) node
     (format stream
             "(qtnode (k ~a) (size ~a) (population ~a) (hash ~a) (~a ~a ~a ~a))"
             k
             (ash 1 k)
             n
             hash
-            (if a (q-n a) 0)
-            (if b (q-n b) 0)
-            (if c (q-n c) 0)
-            (if d (q-n d) 0))))
+            (if nw (q-n nw) 0)
+            (if ne (q-n ne) 0)
+            (if sw (q-n sw) 0)
+            (if se (q-n se) 0))))
 
 
-(declaim (inline to-64-bit))
+(declaim (inline to-64-bit)
+         (ftype (function ((unsigned-byte 63)) (unsigned-byte 63)) to-64-bit))
+
 (defun to-64-bit (num)
   (logand num (- (ash 1 63) 1)))
 
-(defun hash-version-1 (a b c d)
+(defun hash-version-1 (nw ne sw se)
   (declare (optimize (speed 1) (space 3) (safety 0) (debug 0))
-           (type qtnode a b c d))
-  (to-64-bit (+ (q-k a)
+           (type qtnode nw ne sw se))
+  (to-64-bit (+ (q-k nw)
                 2
-                (to-64-bit (* 5131830419411 (q-hash a)))
-                (to-64-bit (* 3758991985019 (q-hash b)))
-                (to-64-bit (* 8973110871315 (q-hash c)))
-                (to-64-bit (* 4318490180473 (q-hash d))))))
+                (to-64-bit (* 5131830419411 (q-hash nw)))
+                (to-64-bit (* 3758991985019 (q-hash ne)))
+                (to-64-bit (* 8973110871315 (q-hash sw)))
+                (to-64-bit (* 4318490180473 (q-hash se))))))
 
-(defun hash-version-2 (a b c d)
-  (declare (optimize (speed 2) (space 3) (safety 0) (debug 0))
-           (type qtnode a b c d))
-  (+ (q-k a)
+(defun hash-version-2 (nw ne sw se)
+  (declare (optimize (speed 1) (space 3) (safety 0) (debug 0))
+           (type qtnode nw ne sw se))
+  (+ (q-k nw)
      2
      (to-64-bit
       (logxor
@@ -65,21 +68,40 @@
              (to-64-bit
               (logxor
                (to-64-bit
-                (* (q-hash a)
-                   5131830419411))
-               (q-hash b)))
+                (* (q-hash nw)
+                   (coerce 5131830419411 '(unsigned-byte 63))))
+               (q-hash ne)))
              3758991985019))
-           (q-hash c)))
+           (q-hash sw)))
          8973110871315))
        (* 4318490180473
-          (q-hash d))))))
+          (q-hash se))))))
 
-(defparameter *join-hash-function* #'hash-version-2)
-(declaim (type function *join-hash-function* ))
-(defun compute-hash (a b c d)
+(defun hash-version-3 (nw ne sw se)
   (declare (optimize (speed 2) (space 3) (safety 0) (debug 0))
-           (type qtnode a b c d))
-  (funcall *join-hash-function* a b c d))
+           (type qtnode nw ne sw se))
+  (+ (q-k nw)
+     2
+     (logxor
+      (*
+       (logxor
+        (*
+         (logxor
+          (* (q-hash nw)
+              5131830419411)
+          (q-hash ne))
+         3758991985019)
+        (q-hash sw))
+       8973110871315)
+      (* 4318490180473
+         (q-hash se)))))
+
+(defparameter *join-hash-function* #'hash-version-3)
+(declaim (type function *join-hash-function* ))
+(defun compute-hash (nw ne sw se)
+  (declare (optimize (speed 2) (space 3) (safety 0) (debug 0))
+           (type qtnode nw ne sw se))
+  (funcall *join-hash-function* nw ne sw se))
 
 
 
@@ -135,30 +157,30 @@
         (format t "Nodes >500 pop : ~a~%" g500)
         (format t "Nodes >1000 pop : ~a~%" g1000)))))
 
-(defun q-join (a b c d)
+(defun q-join (nw ne sw se)
   "Combine four children at level `k-1` to a new node at level `k`.
 If this is cached, return the cached node.
 Otherwise, create a new node, and add it to the cache."
-  (declare (type qtnode a b c d))
+  (declare (type qtnode nw ne sw se))
 
 
-  (multiple-value-bind (val found) (mm-get *join-memo* a b c d)
+  (multiple-value-bind (val found) (mm-get *join-memo* nw ne sw se)
     (cond
       (found
        val)
       ((not found)
-       (mm-add *join-memo* (list a b c d)
+       (mm-add *join-memo* (list nw ne sw se)
                (progn
-                 (make-qtnode :k (1+ (q-k a))
-                              :a a
-                              :b b
-                              :c c
-                              :d d
-                              :n (+ (q-n a)
-                                    (q-n b)
-                                    (q-n c)
-                                    (q-n d))
-                              :hash (compute-hash a b c d))))))))
+                 (make-qtnode :k (1+ (q-k nw))
+                              :nw nw
+                              :ne ne
+                              :sw sw
+                              :se se
+                              :n (+ (q-n nw)
+                                    (q-n ne)
+                                    (q-n sw)
+                                    (q-n se))
+                              :hash (compute-hash nw ne sw se))))))))
 
 (defun get-zero (k)
   "Return an empty node at level `k`."
@@ -183,18 +205,25 @@ Otherwise, create a new node, and add it to the cache."
   "Return a node at level `k+1`, which is centered on the given quadtree node."
   (declare (type qtnode m))
   (loop :for i :to times
-        :for z = (get-zero (q-k (q-a m)))
-          :then (get-zero (q-k (q-a centered)))
+        :for z = (get-zero (q-k (q-nw m)))
+          :then (get-zero (q-k (q-nw centered)))
         :for centered = m
           :then
-          (with-slots (a b c d) centered
+          (with-slots (nw ne sw se) centered
             (q-join
-             (q-join z z z a)
-             (q-join z z b z)
-             (q-join z c z z)
-             (q-join d z z z)))
+             (q-join z z z nw)
+             (q-join z z ne z)
+             (q-join z sw z z)
+             (q-join se z z z)))
         :finally (return centered)))
-(declaim (inline inner-successor ssuccessor q-join life life-4x4))
+
+
+;; (declaim (inline inner-successor
+;;                  successor
+;;                  q-join
+;;                  life
+;;                  life-4x4))
+
 (defun life (a b c
              d e f
              g h i)
@@ -229,64 +258,116 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
   (q-join
    ;; Copy/pasted from. .(find-file-other-window "~/src/hashlife/hashlife.py" )
    ;; na = life(m.a.a, m.a.b, m.b.a, m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a)  # AD
-   (life        (q-a (q-a m))  (q-b (q-a m))  (q-a (q-b m))
-                (q-c (q-a m))  (q-d (q-a m))  (q-c (q-b m))
-                (q-a (q-c m))  (q-b (q-c m))  (q-a (q-d m)))
+   (life        (q-nw (q-nw m))  (q-ne (q-nw m))  (q-nw (q-ne m))
+                (q-sw (q-nw m))  (q-se (q-nw m))  (q-sw (q-ne m))
+                (q-nw (q-sw m))  (q-ne (q-sw m))  (q-nw (q-se m)))
 
-   ;; nb = life((q-b (q-a m)), (q-a (q-b m)), (q-b (q-b m)), (q-d (q-a m)), (q-c (q-b m)), (q-d (q-b m)), (q-b (q-c m)), (q-a (q-d m)), (q-b (q-d m)))  # BC
-   (life        (q-b (q-a m))  (q-a (q-b m))  (q-b (q-b m))
-                (q-d (q-a m))  (q-c (q-b m))  (q-d (q-b m))
-                (q-b (q-c m))  (q-a (q-d m))  (q-b (q-d m)))
+   ;; nb = life((q-ne (q-nw m)), (q-nw (q-ne m)), (q-ne (q-ne m)), (q-se (q-nw m)), (q-sw (q-ne m)), (q-se (q-ne m)), (q-ne (q-sw m)), (q-nw (q-se m)), (q-ne (q-se m)))  # BC
+   (life        (q-ne (q-nw m))  (q-nw (q-ne m))  (q-ne (q-ne m))
+                (q-se (q-nw m))  (q-sw (q-ne m))  (q-se (q-ne m))
+                (q-ne (q-sw m))  (q-nw (q-se m))  (q-ne (q-se m)))
 
    ;; nc = life(m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a, m.c.c, m.c.d, m.d.c)  # CB
-   (life        (q-c (q-a m))  (q-d (q-a m))  (q-c (q-b m))
-                (q-a (q-c m))  (q-b (q-c m))  (q-a (q-d m))
-                (q-c (q-c m))  (q-d (q-c m))  (q-c (q-d m)))
+   (life        (q-sw (q-nw m))  (q-se (q-nw m))  (q-sw (q-ne m))
+                (q-nw (q-sw m))  (q-ne (q-sw m))  (q-nw (q-se m))
+                (q-sw (q-sw m))  (q-se (q-sw m))  (q-sw (q-se m)))
 
    ;; nd = life(m.a.d, m.b.c, m.b.d, m.c.b, m.d.a, m.d.b, m.c.d, m.d.c, m.d.d)  # DA
-   (life        (q-d (q-a m))  (q-c (q-b m))  (q-d (q-b m))
-                (q-b (q-c m))  (q-a (q-d m))  (q-b (q-d m))
-                (q-d (q-c m))  (q-c (q-d m))  (q-d (q-d m)))))
+   (life        (q-se (q-nw m))  (q-sw (q-ne m))  (q-se (q-ne m))
+                (q-ne (q-sw m))  (q-nw (q-se m))  (q-ne (q-se m))
+                (q-se (q-sw m))  (q-sw (q-se m))  (q-se (q-se m)))))
+
+(defun centered-sub-node (node)
+  (with-slots (nw ne sw se) node
+    (q-join (q-se nw)
+            (q-sw ne)
+            (q-ne sw)
+            (q-nw se))))
+
+(defun centered-horizontal (w e)
+  (q-join (q-se (q-ne w))
+          (q-sw (q-nw e))
+          (q-ne (q-se e))
+          (q-ne (q-sw e))))
+
+(defun centered-vertical (n s)
+  (q-join (q-se (q-sw n))
+          (q-sw (q-se n))
+          (q-ne (q-nw s))
+          (q-nw (q-ne s))))
+
+(defun centered-sub-sub-node (node)
+  (with-slots (nw ne sw se) node
+    (q-join (q-se (q-se nw))
+            (q-sw (q-sw ne))
+            (q-ne (q-ne sw))
+            (q-nw (q-nw se)))))
+
+(defun next-generation (node)
+  (cond
+    ((zerop (q-n node))
+     (q-nw node))
+    
+    ((= 2 (q-k node))
+     (life-4x4 node))
+
+    (t
+     (with-slots (nw ne sw se) node
+       (let ((n00 (centered-sub-node nw))
+             (n01 (centered-horizontal nw ne))
+             (n02 (centered-sub-node ne))
+
+             (n10 (centered-vertical nw sw))
+             (n11 (centered-sub-sub-node node))
+             (n12 (centered-vertical ne se))
+
+             (n20 (centered-sub-node sw))
+             (n21 (centered-horizontal sw se))
+             (n22 (centered-sub-node se)))
+         (q-join (next-generation (q-join n00 n01 n11 n11))
+                 (next-generation (q-join n01 n02 n11 n12))
+                 (next-generation (q-join n10 n11 n20 n21))
+                 (next-generation (q-join n11 n12 n21 n22))))))))
 
 (defun inner-successors (m j)
   (let (
         ;; Top Row
-        (c1 (successor (q-a m)
+        (c1 (successor (q-nw m)
                        j))
 
-        (c2 (successor (q-join (q-b (q-a m))  (q-a (q-b m))
+        (c2 (successor (q-join (q-ne (q-nw m))  (q-nw (q-ne m))
 
-                               (q-d (q-a m))  (q-c (q-b m)))
+                               (q-se (q-nw m))  (q-sw (q-ne m)))
                        j))
-        (c3 (successor (q-b m)
+        (c3 (successor (q-ne m)
                        j))
 
         ;; Middle Row
-        (c4 (successor (q-join (q-c (q-a m))  (q-d (q-a m))
-                               (q-a (q-c m))  (q-b (q-c m)))
+        (c4 (successor (q-join (q-sw (q-nw m))  (q-se (q-nw m))
+                               (q-nw (q-sw m))  (q-ne (q-sw m)))
                        j))
-        (c5 (successor (q-join (q-d (q-a m))  (q-c (q-b m))
-                               (q-b (q-c m))  (q-a (q-d m)))
+        (c5 (successor (q-join (q-se (q-nw m))  (q-sw (q-ne m))
+                               (q-ne (q-sw m))  (q-nw (q-se m)))
                        j))
-        (c6 (successor (q-join (q-c (q-b m))  (q-d (q-b m))
-                               (q-a (q-d m))  (q-b (q-d m)))
+        (c6 (successor (q-join (q-sw (q-ne m))  (q-se (q-ne m))
+                               (q-nw (q-se m))  (q-ne (q-se m)))
                        j))
 
         ;; Bottom row
-        (c7 (successor (q-c m)
+        (c7 (successor (q-sw m)
                        j))
-        (c8 (successor (q-join (q-b (q-c m))  (q-a (q-d m))
-                               (q-d (q-c m))  (q-c (q-d m)))
+        (c8 (successor (q-join (q-ne (q-sw m))  (q-nw (q-se m))
+                               (q-se (q-sw m))  (q-sw (q-se m)))
                        j))
-        (c9 (successor (q-d m)
+        (c9 (successor (q-se m)
                        j)))
 
     ;; (format t "m ~a~%" m)
-    ;; (format t "(q-a m) ~a~%(q-b m) ~a~%(q-c m) ~a~%(q-d m) ~a~%" (q-a m) (q-b m) (q-c m) (q-d m) )
-    ;; (format t "(q-a (q-a m)) ~a~%(q-b (q-a m)) ~a~%(q-c (q-a m)) ~a~%(q-d (q-a m)) ~a~%" (q-a (q-a m)) (q-b (q-a m)) (q-c (q-a m)) (q-d (q-a m)))
-    ;; (format t "(q-a (q-b m)) ~a~%(q-b (q-b m)) ~a~%(q-c (q-b m)) ~a~%(q-d (q-b m)) ~a~%" (q-a (q-b m)) (q-b (q-b m)) (q-c (q-b m)) (q-d (q-b m)))
-    ;; (format t "(q-a (q-c m)) ~a~%(q-b (q-c m)) ~a~%(q-c (q-c m)) ~a~%(q-d (q-c m)) ~a~%" (q-a (q-c m)) (q-b (q-c m)) (q-c (q-c m)) (q-d (q-c m)))
-    ;; (format t "(q-a (q-d m)) ~a~%(q-b (q-d m)) ~a~%(q-c (q-d m)) ~a~%(q-d (q-d m)) ~a~%" (q-a (q-d m)) (q-b (q-d m)) (q-c (q-d m)) (q-d (q-d m)))
+    ;; (format t "(q-nw m) ~a~%(q-ne m) ~a~%(q-sw m) ~a~%(q-se m) ~a~%" (q-nw m) (q-ne m) (q-sw m) (q-se m) )
+    ;; (format t "(q-nw (q-nw m)) ~a~%(q-ne (q-nw m)) ~a~%(q-sw (q-nw m)) ~a~%(q-se (q-nw m)) ~a~%" (q-nw (q-nw m)) (q-ne (q-nw m)) (q-sw (q-nw m)) (q-se (q-nw m)))
+    ;; (format t "(q-nw (q-ne m)) ~a~%(q-ne (q-ne m)) ~a~%(q-sw (q-ne m)) ~a~%(q-se (q-ne m)) ~a~%" (q-nw (q-ne m)) (q-ne (q-ne m)) (q-sw (q-ne m)) (q-se (q-ne m)))
+    ;; (format t "(q-nw (q-sw m)) ~a~%(q-ne (q-sw m)) ~a~%(q-sw (q-sw m)) ~a~%(q-se (q-sw m)) ~a~%" (q-nw (q-sw m)) (q-ne (q-sw m)) (q-sw (q-sw m)) (q-se (q-sw m)))
+    ;; (format t "(q-nw (q-se m)) ~a~%(q-ne (q-se m)) ~a~%(q-sw (q-se m)) ~a~%(q-se (q-se m)) ~a~%" (q-nw (q-se m)) (q-ne (q-se m)) (q-sw (q-se m)) (q-se (q-se m)))
     ;; (format t "c1 ~a~%c2 ~a~%c3 ~a~%c4 ~a~%c5 ~a~%c6 ~a~%c7 ~a~%c8 ~a~%c9 ~a~%"
     ;;         c1 c2 c3 c4 c5 c6 c7 c8 c9)
 
@@ -307,7 +388,7 @@ where j<= k-2, caching the result."
         ((inner-successor ()
            (cond
              ((zerop (q-n node))
-              (q-a node))
+              (q-nw node))
 
              ((= 2 (q-k node))
               (life-4x4 node))
@@ -320,15 +401,15 @@ where j<= k-2, caching the result."
                 ;;(break)
                 (if (< j (- (q-k node) 2))
                     (q-join
-                     (q-join (q-d c1) (q-c c2)
-                             (q-b c4) (q-a c5))
-                     (q-join (q-d c2) (q-c c3)
-                             (q-b c5) (q-a c6))
+                     (q-join (q-se c1) (q-sw c2)
+                             (q-ne c4) (q-nw c5))
+                     (q-join (q-se c2) (q-sw c3)
+                             (q-ne c5) (q-nw c6))
 
-                     (q-join (q-d c4) (q-c c5)
-                             (q-b c7) (q-a c8))
-                     (q-join (q-d c5) (q-c c6)
-                             (q-b c8) (q-a c9)))
+                     (q-join (q-se c4) (q-sw c5)
+                             (q-ne c7) (q-nw c8))
+                     (q-join (q-se c5) (q-sw c6)
+                             (q-ne c8) (q-nw c9)))
                     (q-join
                      (successor (q-join c1 c2
                                         c4 c5)
@@ -375,7 +456,7 @@ where j<= k-2, caching the result."
          = (loop
              :while (> (length pattern)
                        0)
-
+             
              :for pt = (car pattern)
 
              :for ept = (even-pt pt)
@@ -397,19 +478,19 @@ where j<= k-2, caching the result."
                             :test #'pt-=)
 
              :collecting (2d-pt (ash (pt-x ept) -1)
-                             (ash (pt-y ept) -1)
-                             (q-join (if a
-                                         (pt-gray a)
-                                         z)
-                                     (if b
-                                         (pt-gray b)
-                                         z)
-                                     (if c
-                                         (pt-gray c)
-                                         z)
-                                     (if d
-                                         (pt-gray d)
-                                         z)))
+                                (ash (pt-y ept) -1)
+                                (q-join (if a
+                                            (pt-gray a)
+                                            z)
+                                        (if b
+                                            (pt-gray b)
+                                            z)
+                                        (if c
+                                            (pt-gray c)
+                                            z)
+                                        (if d
+                                            (pt-gray d)
+                                            z)))
                :into next-level
              :when a
                :do (setf pattern
@@ -430,10 +511,11 @@ where j<= k-2, caching the result."
        :finally (return (pt-gray (car pattern)))))))
 
 (defun inner (node)
-  (q-join (q-d (q-a node))
-          (q-c (q-b node))
-          (q-b (q-c node))
-          (q-a (q-d node))))
+  (q-join
+   (q-se (q-nw node))
+   (q-sw (q-ne node))
+   (q-ne (q-sw node))
+   (q-nw (q-se node))))
 
 (defun crop (node)
   (cond ((or (<= (q-k node) 3 )
@@ -483,19 +565,19 @@ expansion of n to find the correct successors."
          (return (crop next-node)))))
 
 (defun is-padded (node)
-  (with-slots (a b c d) node
-    (and ;; (q-a node)
-     (= (q-n a)
-        (q-n (q-d (q-d a))))
+  (with-slots (nw ne sw se) node
+    (and ;; (q-nw node)
+     (= (q-n nw)
+        (q-n (q-se (q-se nw))))
 
-     (= (q-n b)
-        (q-n (q-c (q-c b))))
+     (= (q-n ne)
+        (q-n (q-sw (q-sw ne))))
 
-     (= (q-n c)
-        (q-n (q-b (q-b c))))
+     (= (q-n sw)
+        (q-n (q-ne (q-ne sw))))
 
-     (= (q-n d)
-        (q-n (q-a (q-a d)))))))
+     (= (q-n se)
+        (q-n (q-nw (q-nw se)))))))
 
 (defun pad (node)
   (if (or (<= (q-k node) 3)
@@ -544,28 +626,28 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
 
       ;; Otherwise try expanding the children
       (t
-       (with-slots (a b c d) node
+       (with-slots (nw ne sw se) node
          (concatenate
           'list
-          (expand a
+          (expand nw
                   :x x
                   :y y
                   :min-x min-x :max-x max-x
                   :min-y min-y :max-y max-y
                   :level level)
-          (expand b
+          (expand ne
                   :x (+ x offset)
                   :y y
                   :min-x min-x :max-x max-x
                   :min-y min-y :max-y max-y
                   :level level)
-          (expand c
+          (expand sw
                   :x x
                   :y (+ y offset)
                   :min-x min-x :max-x max-x
                   :min-y min-y :max-y max-y
                   :level level)
-          (expand d
+          (expand se
                   :x (+ x offset)
                   :y (+ y offset)
                   :min-x min-x :max-x max-x
@@ -596,10 +678,10 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
 
       ;; Otherwise try expanding the children
       (t
-       (for-each-cell (q-a node) level function x y)
-       (for-each-cell (q-b node) level function (+ x offset) y)
-       (for-each-cell (q-c node) level function x (+ y offset))
-       (for-each-cell (q-d node) level function (+ x offset) (+ y offset))))))
+       (for-each-cell (q-nw node) level function x y)
+       (for-each-cell (q-ne node) level function (+ x offset) y)
+       (for-each-cell (q-sw node) level function x (+ y offset))
+       (for-each-cell (q-se node) level function (+ x offset) (+ y offset))))))
 
 (defun find-bounds (node level)
   "Turn a quadtree into a list of (x, y, gray) triples in
@@ -628,7 +710,7 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
                    :finally (return (2d-pt min-x min-y *on*)))))
     (sort (mapcar
            (lambda (pt)
-             (hl::pt (- (pt-x pt) (pt-x min-pt))
+             (2d-pt (- (pt-x pt) (pt-x min-pt))
                      (- (pt-y pt) (pt-y min-pt))
                      1))
            pts)
@@ -638,7 +720,7 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
   (every #'hl::pt-= (align pts) (align expanded)))
 
 (defun show-side-by-side (pat-name n &optional (stream t))
-  (declare (type fixnum n))
+  (declare (type integer n))
   (let* ((pat (read-game-file pat-name))
          (node (construct pat)))
     (loop
@@ -694,3 +776,4 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
                    *off* *off*)
            (q-join *off* *on*
                    *on* *on*))))
+

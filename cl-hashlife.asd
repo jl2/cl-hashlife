@@ -25,6 +25,7 @@
                #:alexandria
                #:str
                #:3d-vectors
+               #:lparallel
                #:svg
                #-sbcl #:cl-unicode)
   :components ((:file "package")

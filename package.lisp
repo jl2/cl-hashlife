@@ -112,10 +112,10 @@
 
    #:q-k
    #:q-n
-   #:q-a
-   #:q-b
-   #:q-c
-   #:q-d
+   #:q-nw
+   #:q-ne
+   #:q-sw
+   #:q-se
 
    #:testpat2
 
