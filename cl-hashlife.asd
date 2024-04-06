@@ -29,11 +29,13 @@
                #:svg
                #-sbcl #:cl-unicode)
   :components ((:file "package")
-               (:file "utilities")
                (:file "manual-memoizer")
-               (:file "hashlife")
-               (:file "visualization")
+               (:file "input-output")
+               (:file "points")
 
+               (:file "hashlife")
+               (:file "utilities")
+               (:file "visualization")
                (:file "main"))
 
   :in-order-to ((test-op (test-op cl-hashlife.test))))

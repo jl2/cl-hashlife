@@ -19,6 +19,25 @@
 (defun qtnode-hash-func (val)
   (sxhash (q-hash val)))
 
+(deftype maybe (thing)
+  "A thing or null."
+  `(or null ,thing))
+
+(defstruct (qtnode (:conc-name q-))
+  "A quad tree node"
+  (k 1 :type fixnum)
+  (nw nil :type (maybe qtnode))
+  (ne nil :type (maybe qtnode))
+  (sw nil :type (maybe qtnode))
+  (se nil :type (maybe qtnode))
+  (n 0 :type integer)
+  (hash 0 :type integer))
+
+(defun node-size (node)
+  "Width/height in cells of a Quadtree node."
+  (ash 1 (q-k node)))
+
+
 ;;(sb-ext:define-hash-table-test qtnode-hash qtnode-hash-func)
 
 (defmethod cl:print-object ((node qtnode) stream)
@@ -88,7 +107,7 @@
         (*
          (logxor
           (* (q-hash nw)
-              5131830419411)
+             5131830419411)
           (q-hash ne))
          3758991985019)
         (q-hash sw))
@@ -96,7 +115,7 @@
       (* 4318490180473
          (q-hash se)))))
 
-(defparameter *join-hash-function* #'hash-version-3)
+(defparameter *join-hash-function* #'hash-version-2)
 (declaim (type function *join-hash-function* ))
 (defun compute-hash (nw ne sw se)
   (declare (optimize (speed 2) (space 3) (safety 0) (debug 0))
@@ -113,7 +132,9 @@
                                                                                       (* 100000 (q-hash node))
                                                                                       j))
                                                      :enabled t))
-
+(defparameter *next-gen-memo* (make-manual-memoizer
+                               :hash-function #'q-hash
+                               :enabled nil))
 (defun mm-reset-all ()
   (mm-reset *join-memo*)
   (mm-reset *successor-memo*)
@@ -261,7 +282,7 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
    (life        (q-nw (q-nw m))  (q-ne (q-nw m))  (q-nw (q-ne m))
                 (q-sw (q-nw m))  (q-se (q-nw m))  (q-sw (q-ne m))
                 (q-nw (q-sw m))  (q-ne (q-sw m))  (q-nw (q-se m)))
-
+ 
    ;; nb = life((q-ne (q-nw m)), (q-nw (q-ne m)), (q-ne (q-ne m)), (q-se (q-nw m)), (q-sw (q-ne m)), (q-se (q-ne m)), (q-ne (q-sw m)), (q-nw (q-se m)), (q-ne (q-se m)))  # BC
    (life        (q-ne (q-nw m))  (q-nw (q-ne m))  (q-ne (q-ne m))
                 (q-se (q-nw m))  (q-sw (q-ne m))  (q-se (q-ne m))
@@ -303,31 +324,41 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
             (q-ne (q-ne sw))
             (q-nw (q-nw se)))))
 
+
 (defun next-generation (node)
-  (cond
-    ((zerop (q-n node))
-     (q-nw node))
-    
-    ((= 2 (q-k node))
-     (life-4x4 node))
-
-    (t
-     (with-slots (nw ne sw se) node
-       (let ((n00 (centered-sub-node nw))
-             (n01 (centered-horizontal nw ne))
-             (n02 (centered-sub-node ne))
-
-             (n10 (centered-vertical nw sw))
-             (n11 (centered-sub-sub-node node))
-             (n12 (centered-vertical ne se))
-
-             (n20 (centered-sub-node sw))
-             (n21 (centered-horizontal sw se))
-             (n22 (centered-sub-node se)))
-         (q-join (next-generation (q-join n00 n01 n11 n11))
-                 (next-generation (q-join n01 n02 n11 n12))
-                 (next-generation (q-join n10 n11 n20 n21))
-                 (next-generation (q-join n11 n12 n21 n22))))))))
+  (multiple-value-bind (val found) (mm-get *next-gen-memo*  node)
+    (cond
+      (found
+       val)
+      ((not found)
+       (let ((next-value (cond
+                      ((zerop (q-n node))
+                       (q-nw node))
+                      
+                      ((= 2 (q-k node))
+                       
+                       (life-4x4 node))
+                      
+                      (t
+                       (with-slots (nw ne sw se) node
+                         (let ((n00 (centered-sub-node nw))
+                               (n01 (centered-horizontal nw ne))
+                               (n02 (centered-sub-node ne))
+                               
+                               (n10 (centered-vertical nw sw))
+                               (n11 (centered-sub-sub-node node))
+                               (n12 (centered-vertical ne se))
+                               
+                               (n20 (centered-sub-node sw))
+                               (n21 (centered-horizontal sw se))
+                               (n22 (centered-sub-node se)))
+                           (q-join (next-generation (q-join n00 n01 n11 n11))
+                                   (next-generation (q-join n01 n02 n11 n12))
+                                   (next-generation (q-join n10 n11 n20 n21))
+                                   (next-generation (q-join n11 n12 n21 n22)))))))))
+         (mm-add *next-gen-memo*
+                 (list node)
+                 next-value))))))
 
 (defun inner-successors (m j)
   (let (

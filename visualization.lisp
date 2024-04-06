@@ -150,7 +150,7 @@
   (with-slots (dot-stream) viz-context
     (dot-node viz-context a)
     (dot-node viz-context b)
-    ;;when (and (not (zerop (q-n a))) (not (zerop (q-n b))))
+    ;;when (and (not (zerop (q-n nw))) (not (zerop (q-n b))))
     (format dot-stream
             "~a -> ~a [~a]~%"
             (q-hash a)
@@ -376,58 +376,58 @@
 
 
   (maybe-start-dot-file (viz-context "inner successors")
-      (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) node
-        (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) m.a
-          (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) m.b
-            (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) m.c
-              (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) m.d
+      (with-slots ((m.nw nw) (m.ne ne) (m.sw sw) (m.se se)) node
+        (with-slots ((m.nw.nw nw) (m.nw.ne ne) (m.nw.sw sw) (m.nw.se se)) m.nw
+          (with-slots ((m.ne.nw nw) (m.ne.ne ne) (m.ne.sw sw) (m.ne.se se)) m.ne
+            (with-slots ((m.sw.nw nw) (m.sw.ne ne) (m.sw.sw sw) (m.sw.se se)) m.sw
+              (with-slots ((m.se.nw nw) (m.se.ne ne) (m.se.sw sw) (m.se.se se)) m.se
                 (let* (
                        ;; Top Row
                        (j1 (show-join viz-context
-                                      m.a.a m.a.b
-                                      m.a.c m.a.d))
+                                      m.nw.nw m.nw.ne
+                                      m.nw.sw m.nw.se))
                        (c1 (show-successor viz-context j1 j))
 
 
                        (j2 (show-join viz-context
-                                      m.a.b  m.b.a
-                                      m.a.d  m.b.c))
+                                      m.nw.ne  m.ne.nw
+                                      m.nw.se  m.ne.sw))
                        (c2 (show-successor viz-context j2 j))
 
                        (j3 (show-join viz-context
-                                      m.b.a m.b.b
-                                      m.b.c m.b.d))
+                                      m.ne.nw m.ne.ne
+                                      m.ne.sw m.ne.se))
                        (c3 (show-successor viz-context j3 j))
 
                        ;; Middle Row
                        (j4 (show-join viz-context
-                                      m.a.c  m.a.d
-                                      m.c.a  m.c.b))
+                                      m.nw.sw  m.nw.se
+                                      m.sw.nw  m.sw.ne))
                        (c4 (show-successor viz-context j4 j))
 
                        (j5 (show-join viz-context
-                                      m.a.d  m.b.c
-                                      m.c.b  m.d.a))
+                                      m.nw.se  m.ne.sw
+                                      m.sw.ne  m.se.nw))
                        (c5 (show-successor viz-context j5 j))
 
 
                        (j6 (show-join viz-context
-                                      m.b.c  m.b.d
-                                      m.d.a  m.d.b))
+                                      m.ne.sw  m.ne.se
+                                      m.se.nw  m.se.ne))
                        (c6 (show-successor viz-context
                                            j6
                                            j))
 
                        ;; Bottom row
-                       (j7 m.c)
+                       (j7 m.sw)
                        (c7 (show-successor viz-context j7 j))
 
                        (j8 (show-join viz-context
-                                      m.c.b m.d.a
-                                      m.c.d m.d.c))
+                                      m.sw.ne m.se.nw
+                                      m.sw.se m.se.sw))
                        (c8 (show-successor viz-context j8 j))
 
-                       (j9 m.d)
+                       (j9 m.se)
                        (c9 (show-successor viz-context j9 j))
                        (inner-successors (list c1 c2 c3 c4 c5 c6 c7 c8 c9))
                        (names '("c1" "c2" "c3" "c4" "c5" "c6" "c7" "c8" "c9")))
@@ -473,33 +473,33 @@ we can compute the 2x2 central successor by iterating over all
 the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
   (declare (type qtnode m))
   (maybe-start-dot-file (viz-context "life-4x4")
-    (with-slots ((ma a) (mb b) (mc c) (md d)) m
-      (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) ma
-        (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) mb
-          (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) mc
-              (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) md
+    (with-slots ((mnw nw) (mne ne) (msw sw) (mse se)) m
+      (with-slots ((m.nw.nw nw) (m.nw.ne ne) (m.nw.sw sw) (m.nw.se se)) mnw
+        (with-slots ((m.ne.nw nw) (m.ne.ne ne) (m.ne.sw sw) (m.ne.se se)) mne
+          (with-slots ((m.sw.nw nw) (m.sw.ne ne) (m.sw.sw sw) (m.sw.se se)) msw
+              (with-slots ((m.se.nw nw) (m.se.ne ne) (m.se.sw sw) (m.se.se se)) mse
                 (let ((result
                         (show-join viz-context
                          ;; Copy/pasted from. .(find-file-other-window "~/src/hashlife/hashlife.py" )
-                         ;; na = life(m.a.a, m.a.b, m.b.a, m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a)  # AD
-                         (show-life-viz  m.a.a  m.a.b  m.b.a
-                                         m.a.c  m.a.d  m.b.c
-                                         m.c.a  m.c.b  m.d.a)
+                         ;; na = life(m.a.a, m.nw.ne, m.ne.nw, m.nw.sw, m.nw.se, m.ne.sw, m.sw.nw, m.sw.ne, m.se.nw)  # AD
+                         (show-life-viz  m.nw.nw  m.nw.ne  m.ne.nw
+                                         m.nw.sw  m.nw.se  m.ne.sw
+                                         m.sw.nw  m.sw.ne  m.se.nw)
 
-                         ;; nb = life(m.a.b, m.b.a, m.b.b, m.a.d, m.b.c, m.b.d, m.c.b, m.d.a, m.d.b)  # BC
-                         (show-life-viz   m.a.b  m.b.a  m.b.b
-                                          m.a.d  m.b.c  m.b.d
-                                          m.c.b  m.d.a  m.d.b)
+                         ;; nb = life(m.nw.ne, m.ne.nw, m.ne.ne, m.nw.se, m.ne.sw, m.ne.se, m.sw.ne, m.se.nw, m.se.ne)  # BC
+                         (show-life-viz   m.nw.ne  m.ne.nw  m.ne.ne
+                                          m.nw.se  m.ne.sw  m.ne.se
+                                          m.sw.ne  m.se.nw  m.se.ne)
 
-                         ;; nc = life(m.a.c, m.a.d, m.b.c, m.c.a, m.c.b, m.d.a, m.c.c, m.c.d, m.d.c)  # CB
-                         (show-life-viz  m.a.c  m.a.d  m.b.c
-                                      m.c.a  m.c.b  m.d.a
-                                      m.c.c  m.c.d  m.d.c)
+                         ;; nc = life(m.nw.sw, m.nw.se, m.ne.sw, m.sw.nw, m.sw.ne, m.se.nw, m.sw.sw, m.sw.se, m.se.sw)  # CB
+                         (show-life-viz  m.nw.sw  m.nw.se  m.ne.sw
+                                      m.sw.nw  m.sw.ne  m.se.nw
+                                      m.sw.sw  m.sw.se  m.se.sw)
 
-                         ;; nd = life(m.a.d, m.b.c, m.b.d, m.c.b, m.d.a, m.d.b, m.c.d, m.d.c, m.d.d)  # DA
-                         (show-life-viz   m.a.d  m.b.c  m.b.d
-                                      m.c.b  m.d.a  m.d.b
-                                      m.c.d  m.d.c  m.d.d))))
+                         ;; nd = life(m.nw.se, m.ne.sw, m.ne.se, m.sw.ne, m.se.nw, m.se.ne, m.sw.se, m.se.sw, m.se.se)  # DA
+                         (show-life-viz   m.nw.se  m.ne.sw  m.ne.se
+                                      m.sw.ne  m.se.nw  m.se.ne
+                                      m.sw.se  m.se.sw  m.se.se))))
                   result))))))))
 
 (defun show-join (viz-context nw ne sw se)
@@ -512,9 +512,9 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
        (mm-add *join-memo* (list nw ne sw se)
                (progn
                  (maybe-start-dot-file (viz-context "show-join")
-                   (let* ((this-k (if (zerop (1+ (q-k a)))
+                   (let* ((this-k (if (zerop (1+ (q-k nw)))
                                       (progn (break) 1)
-                                      (1+ (q-k a))))
+                                      (1+ (q-k nw))))
 
                           (result (make-qtnode :k this-k
                                                :nw nw
@@ -562,69 +562,69 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                   lf4))
 
                (t
-                (with-slots ((m.a a) (m.b b) (m.c c) (m.d d)) node
-                  (with-slots ((m.a.a a) (m.a.b b) (m.a.c c) (m.a.d d)) m.a
-                    (with-slots ((m.b.a a) (m.b.b b) (m.b.c c) (m.b.d d)) m.b
-                      (with-slots ((m.c.a a) (m.c.b b) (m.c.c c) (m.c.d d)) m.c
-                        (with-slots ((m.d.a a) (m.d.b b) (m.d.c c) (m.d.d d)) m.d
+                (with-slots ((m.nw nw) (m.ne ne) (m.sw sw) (m.se se)) node
+                  (with-slots ((m.nw.nw nw) (m.nw.ne ne) (m.nw.sw sw) (m.nw.se se)) m.nw
+                    (with-slots ((m.ne.nw nw) (m.ne.ne ne) (m.ne.sw sw) (m.ne.se se)) m.ne
+                      (with-slots ((m.sw.nw nw) (m.sw.ne ne) (m.sw.sw sw) (m.sw.se se)) m.sw
+                        (with-slots ((m.se.nw nw) (m.se.ne ne) (m.se.sw sw) (m.se.se se)) m.se
 
-                          (format t "ma ~a~%mb ~a~%mc ~a~%md ~a~%" m.a m.b m.c m.d)
-                          (format t "maa ~a~%mab ~a~%mac ~a~%mad ~a~%" m.a.a m.a.b m.a.c m.a.d)
-                          (format t "maa ~a~%mab ~a~%mac ~a~%mbd ~a~%" m.b.a m.b.b m.b.c m.b.d)
-                          (format t "maa ~a~%mab ~a~%mac ~a~%mcd ~a~%" m.c.a m.c.b m.c.c m.c.d)
-                          (format t "maa ~a~%mab ~a~%mac ~a~%mdd ~a~%" m.d.a m.d.b m.d.c m.d.d)
+                          (format t "ma ~a~%mb ~a~%mc ~a~%md ~a~%" m.nw m.ne m.sw m.se)
+                          (format t "maa ~a~%mab ~a~%mac ~a~%mad ~a~%" m.nw.nw m.nw.ne m.nw.sw m.nw.se)
+                          (format t "maa ~a~%mab ~a~%mac ~a~%mbd ~a~%" m.ne.nw m.ne.ne m.ne.sw m.ne.se)
+                          (format t "maa ~a~%mab ~a~%mac ~a~%mcd ~a~%" m.sw.nw m.sw.ne m.sw.sw m.sw.se)
+                          (format t "maa ~a~%mab ~a~%mac ~a~%mdd ~a~%" m.se.nw m.se.ne m.se.sw m.se.se)
 
                           (let* (
                                  ;; Top Row
                                  (j1 (show-join viz-context
-                                                m.a.a m.a.b
-                                                m.a.c m.a.d))
+                                                m.nw.nw m.nw.ne
+                                                m.nw.sw m.nw.se))
                                  (c1 (show-successor viz-context j1 j))
 
 
                                  (j2 (show-join viz-context
-                                                m.a.b  m.b.a
-                                                m.a.d  m.b.c))
+                                                m.nw.ne  m.ne.nw
+                                                m.nw.se  m.ne.sw))
                                  (c2 (show-successor viz-context j2 j))
 
 
                                  (j3 (show-join viz-context
-                                                m.b.a m.b.b
-                                                m.b.c m.b.d))
+                                                m.ne.nw m.ne.ne
+                                                m.ne.sw m.ne.se))
                                  (c3 (show-successor viz-context j3 j))
 
 
                                  ;; Middle Row
                                  (j4 (show-join viz-context
-                                                m.a.c  m.a.d
-                                                m.c.a  m.c.b))
+                                                m.nw.sw  m.nw.se
+                                                m.sw.nw  m.sw.ne))
                                  (c4 (show-successor viz-context j4 j))
 
 
                                  (j5 (show-join viz-context
-                                                m.a.d  m.b.c
-                                                m.c.b  m.d.a))
+                                                m.nw.se  m.ne.sw
+                                                m.sw.ne  m.se.nw))
                                  (c5 (show-successor viz-context j5 j))
 
 
                                  (j6 (show-join viz-context
-                                                m.b.c  m.b.d
-                                                m.d.a  m.d.b))
+                                                m.ne.sw  m.ne.se
+                                                m.se.nw  m.se.ne))
                                  (c6 (show-successor viz-context j6 j))
 
                                  ;; Bottom row
 
-                                 (j7 m.c)
+                                 (j7 m.sw)
                                  (c7 (show-successor viz-context j7 j))
 
 
                                  (j8 (show-join viz-context
-                                                m.c.b m.d.a
-                                                m.c.d m.d.c))
+                                                m.sw.ne m.se.nw
+                                                m.sw.se m.se.sw))
                                  (c8 (show-successor viz-context j8 j))
 
 
-                                 (j9 m.d)
+                                 (j9 m.se)
                                  (c9 (show-successor viz-context j9 j)))
                             (flet ((i-join (nw ne sw se)
                                      (show-join viz-context nw ne sw se)))
