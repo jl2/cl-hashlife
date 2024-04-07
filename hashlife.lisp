@@ -25,35 +25,106 @@
 
 (defstruct (qtnode (:conc-name q-))
   "A quad tree node"
-  (k 1 :type fixnum)
+  (level 1 :type fixnum)
   (nw nil :type (maybe qtnode))
   (ne nil :type (maybe qtnode))
   (sw nil :type (maybe qtnode))
   (se nil :type (maybe qtnode))
   (n 0 :type integer)
-  (hash 0 :type integer))
+  (hash 0 :type integer)
+  (next-generation nil :type (maybe qtnode)))
 
 (defun node-size (node)
   "Width/height in cells of a Quadtree node."
-  (ash 1 (q-k node)))
+  (ash 1 (q-level node)))
 
+(defun set-bit (node x y)
+  (with-slots (level nw ne sw se) node
+    (let ((offset (ash 1 (- level 2))))
+      (cond ((zerop level)
+             *on*)
+
+            ((and (< x 0)
+                  (< y 0))
+             (q-join (set-bit nw
+                              (+ x offset)
+                              (+ y offset))
+                     ne
+                     sw
+                     se))
+
+            ((< x 0)
+             (q-join nw
+                     ne
+                     (set-bit sw
+                              (+ x offset)
+                              (- y offset))
+                     se))
+
+            ((< y 0)
+             (q-join nw
+                     (set-bit ne
+                              (- x offset)
+                              (+ y offset))
+                     sw
+                     se))
+            ((< x 0)
+             (q-join nw
+                     ne
+                     sw
+                     (set-bit se
+                              (- x offset)
+                              (- y offset))))))))
+
+(defun get-bit (node x y)
+  (with-slots (level nw ne sw se) node
+    (let ((offset (ash 1 (- level 2))))
+      (cond ((zerop level)
+             1)
+
+            ((and (< x 0)
+                  (< y 0))
+             (get-bit nw
+                      (+ x offset)
+                      (+ y offset)))
+
+            ((< x 0)
+             (get-bit ne
+                      (+ x offset)
+                      (- y offset)))
+
+            ((< y 0)
+             (get-bit sw
+                      (- x offset)
+                      (+ y offset)))
+            ((< x 0)
+             (get-bit se
+                      (- x offset)
+                      (- y offset)))))))
 
 ;;(sb-ext:define-hash-table-test qtnode-hash qtnode-hash-func)
 
 (defmethod cl:print-object ((node qtnode) stream)
   (declare (type stream stream))
-  (with-slots (k n nw ne sw se hash) node
+  (with-slots (level n nw ne sw se hash) node
     (format stream
-            "(qtnode (k ~a) (size ~a) (population ~a) (hash ~a) (~a ~a ~a ~a))"
-            k
-            (ash 1 k)
+            "(qtnode (level ~a) (size ~a) (population ~a) (hash ~a) (~a ~a ~a ~a))"
+            level
+            (ash 1 level)
             n
             hash
-            (if nw (q-n nw) 0)
-            (if ne (q-n ne) 0)
-            (if sw (q-n sw) 0)
-            (if se (q-n se) 0))))
-
+            (if nw
+                (q-n nw)
+                0)
+            (if ne
+                (q-n ne)
+                0)
+            (if sw
+                (q-n sw)
+                0)
+            (if se
+                (q-n se)
+                0))))
 
 (declaim (inline to-64-bit)
          (ftype (function ((unsigned-byte 63)) (unsigned-byte 63)) to-64-bit))
@@ -64,7 +135,7 @@
 (defun hash-version-1 (nw ne sw se)
   (declare (optimize (speed 1) (space 3) (safety 0) (debug 0))
            (type qtnode nw ne sw se))
-  (to-64-bit (+ (q-k nw)
+  (to-64-bit (+ (q-level nw)
                 2
                 (to-64-bit (* 5131830419411 (q-hash nw)))
                 (to-64-bit (* 3758991985019 (q-hash ne)))
@@ -74,7 +145,7 @@
 (defun hash-version-2 (nw ne sw se)
   (declare (optimize (speed 1) (space 3) (safety 0) (debug 0))
            (type qtnode nw ne sw se))
-  (+ (q-k nw)
+  (+ (q-level nw)
      2
      (to-64-bit
       (logxor
@@ -99,7 +170,7 @@
 (defun hash-version-3 (nw ne sw se)
   (declare (optimize (speed 2) (space 3) (safety 0) (debug 0))
            (type qtnode nw ne sw se))
-  (+ (q-k nw)
+  (+ (q-level nw)
      2
      (logxor
       (*
@@ -148,14 +219,13 @@
   (mm-reset *successor-memo*)
   (mm-reset *zero-memo*))
 
-(defparameter *on* (make-qtnode :k 0 :n 1 :hash 1)
+(defparameter *on* (make-qtnode :level 0 :n 1 :hash 1)
   "Base level binary node 1")
 
-(defparameter *off* (make-qtnode :k 0 :n 0 :hash 0)
+(defparameter *off* (make-qtnode :level 0 :n 0 :hash 0)
   "Base level binary node 0")
 
 (defparameter *mask* (1- (ash 1 63)))
-
 
 (defun mm-stats (memo)
   (with-slots (hash-table hit-count miss-count hi-count call-count) memo
@@ -200,7 +270,7 @@ Otherwise, create a new node, and add it to the cache."
       ((not found)
        (mm-add *join-memo* (list nw ne sw se)
                (progn
-                 (make-qtnode :k (1+ (q-k nw))
+                 (make-qtnode :level (1+ (q-level nw))
                               :nw nw
                               :ne ne
                               :sw sw
@@ -234,8 +304,8 @@ Otherwise, create a new node, and add it to the cache."
   "Return a node at level `k+1`, which is centered on the given quadtree node."
   (declare (type qtnode m))
   (loop :for i :to times
-        :for z = (get-zero (q-k (q-nw m)))
-          :then (get-zero (q-k (q-nw centered)))
+        :for z = (get-zero (q-level (q-nw m)))
+          :then (get-zero (q-level (q-nw centered)))
         :for centered = m
           :then
           (with-slots (nw ne sw se) centered
@@ -290,7 +360,7 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
    (life        (q-nw (q-nw m))  (q-ne (q-nw m))  (q-nw (q-ne m))
                 (q-sw (q-nw m))  (q-se (q-nw m))  (q-sw (q-ne m))
                 (q-nw (q-sw m))  (q-ne (q-sw m))  (q-nw (q-se m)))
- 
+
    ;; nb = life((q-ne (q-nw m)), (q-nw (q-ne m)), (q-ne (q-ne m)), (q-se (q-nw m)), (q-sw (q-ne m)), (q-se (q-ne m)), (q-ne (q-sw m)), (q-nw (q-se m)), (q-ne (q-se m)))  # BC
    (life        (q-ne (q-nw m))  (q-nw (q-ne m))  (q-ne (q-ne m))
                 (q-se (q-nw m))  (q-sw (q-ne m))  (q-se (q-ne m))
@@ -305,6 +375,26 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
    (life        (q-se (q-nw m))  (q-sw (q-ne m))  (q-se (q-ne m))
                 (q-ne (q-sw m))  (q-nw (q-se m))  (q-ne (q-se m))
                 (q-se (q-sw m))  (q-sw (q-se m))  (q-se (q-se m)))))
+
+(defun horizontal-forward (w e)
+  (next-generation (q-join (q-ne w)
+                           (q-nw e)
+                           (q-se w)
+                           (q-sw e))))
+
+(defun vertical-forward (n s)
+  (next-generation (q-join (q-sw n)
+                           (q-se n)
+                           (q-nw s)
+                           (q-ne s))))
+
+(defun center-forward (node)
+  (with-slots (nw ne sw se) node
+    (next-generation (q-join (q-se nw)
+                             (q-sw ne)
+                             (q-ne sw)
+                             (q-nw se)))))
+
 
 (defun centered-sub-node (node)
   (with-slots (nw ne sw se) node
@@ -334,39 +424,68 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
 
 
 (defun next-generation (node)
-  (multiple-value-bind (val found) (mm-get *next-gen-memo*  node)
+  (with-slots (next-generation n level nw ne sw se) node
     (cond
-      (found
-       val)
-      ((not found)
-       (let ((next-value (cond
-                      ((zerop (q-n node))
-                       (q-nw node))
-                      
-                      ((= 2 (q-k node))
-                       
-                       (life-4x4 node))
-                      
-                      (t
-                       (with-slots (nw ne sw se) node
-                         (let ((n00 (centered-sub-node nw))
-                               (n01 (centered-horizontal nw ne))
-                               (n02 (centered-sub-node ne))
-                               
-                               (n10 (centered-vertical nw sw))
-                               (n11 (centered-sub-sub-node node))
-                               (n12 (centered-vertical ne se))
-                               
-                               (n20 (centered-sub-node sw))
-                               (n21 (centered-horizontal sw se))
-                               (n22 (centered-sub-node se)))
-                           (q-join (next-generation (q-join n00 n01 n11 n11))
-                                   (next-generation (q-join n01 n02 n11 n12))
-                                   (next-generation (q-join n10 n11 n20 n21))
-                                   (next-generation (q-join n11 n12 n21 n22)))))))))
-         (mm-add *next-gen-memo*
-                 (list node)
-                 next-value))))))
+      (next-generation
+       next-generation)
+      ((zerop n)
+       (setf next-generation nw))
+
+      ((= level 2)
+       (setf next-generation (life-4x4 node)))
+
+      (t
+       (let ((n00 (next-generation nw))
+             (n01 (horizontal-forward nw ne))
+             (n02 (next-generation ne))
+             (n10 (vertical-forward nw sw))
+             (n11 (center-forward node))
+             (n12 (vertical-forward ne se))
+             (n20 (next-generation se))
+             (n21 (horizontal-forward sw se))
+             (n22 (next-generation se)))
+         (setf next-generation
+               (q-join
+                (next-generation (q-join n00 n01 n10 n11))
+                (next-generation (q-join n01 n02 n11 n12))
+                (next-generation (q-join n10 n11 n20 n21))
+                (next-generation (q-join n11 n12 n21 n22)))))))
+    next-generation))
+
+;; (defun next-generation (node)
+;;   (multiple-value-bind (val found) (mm-get *next-gen-memo*  node)
+;;     (cond
+;;       (found
+;;        val)
+;;       ((not found)
+;;        (let ((next-value (cond
+;;                            ((zerop (q-n node))
+;;                             (q-nw node))
+
+;;                            ((= 2 (q-level node))
+
+;;                             (life-4x4 node))
+
+;;                            (t
+;;                             (with-slots (nw ne sw se) node
+;;                               (let ((n00 (centered-sub-node nw))
+;;                                     (n01 (centered-horizontal nw ne))
+;;                                     (n02 (centered-sub-node ne))
+
+;;                                     (n10 (centered-vertical nw sw))
+;;                                     (n11 (centered-sub-sub-node node))
+;;                                     (n12 (centered-vertical ne se))
+
+;;                                     (n20 (centered-sub-node sw))
+;;                                     (n21 (centered-horizontal sw se))
+;;                                     (n22 (centered-sub-node se)))
+;;                                 (q-join (next-generation (q-join n00 n01 n11 n11))
+;;                                         (next-generation (q-join n01 n02 n11 n12))
+;;                                         (next-generation (q-join n10 n11 n20 n21))
+;;                                         (next-generation (q-join n11 n12 n21 n22)))))))))
+;;          (mm-add *next-gen-memo*
+;;                  (list node)
+;;                  next-value))))))
 
 (defun inner-successors (m j)
   (let (
@@ -415,12 +534,12 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
             c4 c5 c6
             c7 c8 c9)))
 
-(defun successor (node &optional (in-j (- (q-k node) 2)))
+(defun successor (node &optional (in-j (- (q-level node) 2)))
   "Return the 2**k-1 x 2**k-1 successor, 2**j generations in the future,
 where j<= k-2, caching the result."
   (declare (type qtnode node)
            (type (or null integer)  in-j))
-  (let* ((j (min in-j (- (q-k node) 2))))
+  (let* ((j (min in-j (- (q-level node) 2))))
     (when (< j 0)
       (error "j ~a < 0" j))
     (flet
@@ -429,7 +548,7 @@ where j<= k-2, caching the result."
              ((zerop (q-n node))
               (q-nw node))
 
-             ((= 2 (q-k node))
+             ((= 2 (q-level node))
               (life-4x4 node))
 
              (t
@@ -438,7 +557,7 @@ where j<= k-2, caching the result."
                                     c7 c8 c9)
                   (inner-successors node j)
                 ;;(break)
-                (if (< j (- (q-k node) 2))
+                (if (< j (- (q-level node) 2))
                     (q-join
                      (q-join (q-se c1) (q-sw c2)
                              (q-ne c4) (q-nw c5))
@@ -495,7 +614,7 @@ where j<= k-2, caching the result."
          = (loop
              :while (> (length pattern)
                        0)
-             
+
              :for pt = (car pattern)
 
              :for ept = (even-pt pt)
@@ -557,7 +676,7 @@ where j<= k-2, caching the result."
    (q-nw (q-se node))))
 
 (defun crop (node)
-  (cond ((or (<= (q-k node) 3 )
+  (cond ((or (<= (q-level node) 3 )
              (not (is-padded node)))
          node)
         (t
@@ -569,7 +688,7 @@ where j<= k-2, caching the result."
       :then (pad next-node)
     :for next-node = (successor padded-node)
     :for gens = 0
-      :then (+ gens (ash 1 (- (q-k padded-node) 2)))
+      :then (+ gens (ash 1 (- (q-level padded-node) 2)))
     :for i :below n
     :finally (return (values next-node gens))))
 
@@ -619,7 +738,7 @@ expansion of n to find the correct successors."
         (q-n (q-nw (q-nw se)))))))
 
 (defun pad (node)
-  (if (or (<= (q-k node) 3)
+  (if (or (<= (q-level node) 3)
           (not  (is-padded node)))
       (pad (center node))
       node))
@@ -636,7 +755,7 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
             (= 0 (q-n node)))
     (return-from expand nil))
 
-  (let* ((size (expt 2 (q-k node)))
+  (let* ((size (expt 2 (q-level node)))
          (offset (ash size -1)))
     (cond
 
@@ -653,7 +772,7 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
        nil)
 
       ;; Collect cells at this zoom level
-      ((= (q-k node) level)
+      ((= (q-level node) level)
 
        ;; Scale quadtree to match scale of level 0
        (let ((reduction (- level)))
@@ -702,11 +821,11 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
             (= 0 (q-n node)))
     (return-from for-each-cell nil))
 
-  (let* ((size (expt 2 (q-k node)))
+  (let* ((size (expt 2 (q-level node)))
          (offset (ash size -1)))
     (cond
       ;; Collect cells at this zoom level
-      ((= (q-k node) level)
+      ((= (q-level node) level)
 
        ;; Scale quadtree to match scale of level 0
        (funcall function
@@ -815,4 +934,3 @@ the rectangle (x,y) -> (lower-bound - upper-bound)"
                    *off* *off*)
            (q-join *off* *on*
                    *on* *on*))))
-

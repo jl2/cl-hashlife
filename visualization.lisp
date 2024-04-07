@@ -304,7 +304,7 @@
                             (mid-y (+ min-y
                                       (/ node-height
                                          2)))
-                            (size (expt 2 (q-k node)))
+                            (size (expt 2 (q-level node)))
                             (gray (- 1 (/ n (* size size) 1.0)))
                             (fill-color (vec4  (* 0.2 gray) (* 0.9 gray) (* 0.1 gray) 1)))
 
@@ -320,7 +320,7 @@
                                      :fill-color (vec4 0 0 0 1)))
 
                        ;; Draw recursively when it's worth doing so
-                       (when (and (> (q-k node) 0)
+                       (when (and (> (q-level node) 0)
                                   (< current-depth depth)
                                   (not (zerop (q-n node))))
 
@@ -512,11 +512,11 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
        (mm-add *join-memo* (list nw ne sw se)
                (progn
                  (maybe-start-dot-file (viz-context "show-join")
-                   (let* ((this-k (if (zerop (1+ (q-k nw)))
+                   (let* ((this-level (if (zerop (1+ (q-level nw)))
                                       (progn (break) 1)
-                                      (1+ (q-k nw))))
+                                      (1+ (q-level nw))))
 
-                          (result (make-qtnode :k this-k
+                          (result (make-qtnode :level this-level
                                                :nw nw
                                                :ne ne
                                                :sw sw
@@ -555,7 +555,7 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                 (show-qt-transition viz-context node *off* "successor 0")
                 (q-nw node))
 
-               ((= (q-k node) 2)
+               ((= (q-level node) 2)
                 (let ((lf4 (show-life-4x4 viz-context node)))
                   (qt-to-svg viz-context lf4)
                   (show-qt-transition viz-context node lf4 "successor life-4x4")
@@ -628,7 +628,7 @@ the 3x3 sub-neighborhoods of 1x1 cells using the standard life rule."
                                  (c9 (show-successor viz-context j9 j)))
                             (flet ((i-join (nw ne sw se)
                                      (show-join viz-context nw ne sw se)))
-                              (cond ((< j (- (q-k node) 2))
+                              (cond ((< j (- (q-level node) 2))
                                      (start-subgraph viz-context "inner-successors" "blue")
                                      (let* ((la (i-join (q-se c1) (q-sw c2)
                                                         (q-ne c4) (q-nw c5)))

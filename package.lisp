@@ -110,7 +110,7 @@
    #:*on*
    #:*off*
 
-   #:q-k
+   #:q-level
    #:q-n
    #:q-nw
    #:q-ne

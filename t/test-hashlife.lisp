@@ -28,10 +28,10 @@
 
 
 (defun validate-tree (node)
-  (if (> (q-k node) 0)
+  (if (> (q-level node) 0)
       (and (>= (q-n node) 0)
-           (<= (q-n node) (expt 2 (* 2 (q-k node))))
-           (= (hl:q-k (q-nw node)) (hl:q-k (q-ne node)) (hl:q-k (q-sw node)) (hl:q-k (q-se node)))
+           (<= (q-n node) (expt 2 (* 2 (q-level node))))
+           (= (hl:q-level (q-nw node)) (hl:q-level (q-ne node)) (hl:q-level (q-sw node)) (hl:q-level (q-se node)))
            (= (q-n node)
               (+ (hl:q-n (q-nw node))
                  (hl:q-n (q-ne node))
@@ -99,7 +99,7 @@
   (loop :for i :below 32
         :for z = (get-zero i)
         :do
-           (is (= i (q-k z)))
+           (is (= i (q-level z)))
            (is (zerop (q-n z)))))
 
 (defun verify-baseline (pat n)
@@ -161,7 +161,7 @@
           :for old-node = test-pat :then node
           :for node = (hl::center test-pat) :then (hl::center node)
           :do
-             (is (= (1+ (hl:q-k old-node)) (hl:q-k node)))
+             (is (= (1+ (hl:q-level old-node)) (hl:q-level node)))
              (is (= (hl:q-n old-node) (hl:q-n node) ))
              (let ((ctr-node (hl::inner node)))
                (is (hl::q-hash ctr-node) (hl::q-hash old-node))))))
