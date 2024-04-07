@@ -115,7 +115,15 @@
       (* 4318490180473
          (q-hash se)))))
 
-(defparameter *join-hash-function* #'hash-version-2)
+(defun hash-version-4 (nw ne sw se)
+  (declare (optimize (speed 1) (space 3) (safety 0) (debug 0))
+           (type qtnode nw ne sw se))
+  (+ (q-hash nw)
+     (* 11 (q-hash ne))
+     (* 101 (q-hash sw))
+     (* 1007 (q-hash se))))
+
+(defparameter *join-hash-function* #'hash-version-4)
 (declaim (type function *join-hash-function* ))
 (defun compute-hash (nw ne sw se)
   (declare (optimize (speed 2) (space 3) (safety 0) (debug 0))
